@@ -271,3 +271,86 @@ select{
 .footer-school{font-weight:800; color:var(--navy); font-size:15px; letter-spacing:-.01em;}
 .footer-motto{font-style:italic; color:var(--brand-dark); font-size:13.5px; font-weight:600;}
 .footer-meta{color:var(--faint); font-size:12.5px;}
+
+/* =====================================================================
+   AI generation — Gemini key panel, status, on-page plan
+   ===================================================================== */
+.field .hint{font-weight:400; color:var(--faint);}
+input[type="file"]{
+  font:inherit; font-size:14px; color:var(--ink-2); background:var(--surface-2);
+  border:1px dashed var(--line); border-radius:var(--r-sm); padding:10px 12px; width:100%;
+}
+input[type="file"]:hover{border-color:var(--brand);}
+
+.ai-settings{
+  border:1px solid var(--line); border-radius:var(--r); background:var(--surface-2);
+  padding:4px 14px; margin:6px 0 14px;
+}
+.ai-settings summary{
+  cursor:pointer; font-weight:600; font-size:14px; color:var(--ink-2);
+  padding:10px 2px; list-style:none; display:flex; align-items:center; gap:8px;
+}
+.ai-settings summary::-webkit-details-marker{display:none;}
+.ai-settings[open] summary{border-bottom:1px solid var(--line); margin-bottom:10px;}
+.key-state{margin-left:auto; font-size:12px; font-weight:600; color:var(--faint);}
+.key-state.ok{color:var(--brand-dark);}
+.ai-body{padding:4px 0 12px;}
+.keyrow{display:flex; gap:8px;}
+.keyrow input{flex:1;}
+.remember{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--soft); margin-top:8px; font-weight:500;}
+.remember input{width:auto; min-height:0;}
+.key-note{font-size:12.5px; color:var(--soft); background:#fff7ef; border:1px solid #f3ddc4;
+  border-radius:10px; padding:11px 13px; margin:12px 0; line-height:1.5;}
+.key-note a{color:var(--brand-dark); font-weight:600;}
+
+.gen-status{font-size:14px; border-radius:10px; padding:12px 14px; margin:0 0 14px; line-height:1.5;}
+.gen-status.hidden{display:none;}
+.gen-status.busy{background:var(--navy-soft); border:1px solid #dde3f2; color:var(--navy); }
+.gen-status.busy::before{content:"⏳ ";}
+.gen-status.warn{background:#fff7ef; border:1px solid #f3ddc4; color:#9a5b16;}
+.gen-status.error{background:#fdecec; border:1px solid #f3c4c4; color:#b23a3a;}
+
+.output-toolbar{display:flex; align-items:center; justify-content:space-between; gap:12px;
+  margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid var(--line);}
+.output-toolbar h3{margin:0; font-size:var(--fs-h3); color:var(--navy); letter-spacing:-.01em;}
+.toolbar-actions{display:flex; gap:8px;}
+
+/* The generated plan, rendered in the school house style */
+.rendered{color:var(--ink); line-height:1.65; font-size:15.5px;}
+.rendered h1{font-size:clamp(21px,3vw,26px); color:var(--navy); letter-spacing:-.02em; margin:0 0 6px;}
+.rendered h2{font-size:18px; color:var(--navy); letter-spacing:-.01em; margin:26px 0 8px;
+  padding-bottom:6px; border-bottom:2px solid var(--brand-soft);}
+.rendered h3{font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--faint);
+  font-weight:700; margin:18px 0 7px;}
+.rendered p{margin:9px 0;}
+.rendered ul, .rendered ol{margin:8px 0; padding-left:22px;}
+.rendered li{margin:5px 0;}
+.rendered strong{color:var(--ink);}
+.rendered hr{border:none; border-top:1px solid var(--line); margin:20px 0;}
+.rendered blockquote{
+  border-left:4px solid var(--purple); background:#fbf7fe; border-radius:0 10px 10px 0;
+  margin:14px 0; padding:12px 16px; color:#2a2330;
+  font-family:"Lora",Georgia,serif; font-size:16px; line-height:1.7;
+}
+.rendered table{width:100%; border-collapse:separate; border-spacing:0; font-size:14px; margin:12px 0;
+  border:1px solid var(--line); border-radius:var(--r); overflow:hidden;}
+.rendered th, .rendered td{padding:10px 12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line);}
+.rendered th{background:var(--softbg, #f6f7fb); font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--soft);}
+.rendered tr:last-child td{border-bottom:none;}
+.rendered code{background:var(--surface-2); border:1px solid var(--line); border-radius:6px; padding:1px 5px; font-size:13.5px;}
+
+@media (max-width:600px){
+  .rendered table, .rendered thead, .rendered tbody, .rendered tr, .rendered th, .rendered td{display:block; width:100%;}
+  .rendered thead{position:absolute; clip:rect(0 0 0 0); height:1px; width:1px; overflow:hidden;}
+  .rendered table{border:none;}
+  .rendered tr{border:1px solid var(--line); border-radius:var(--r); margin-bottom:10px; background:#fff;}
+  .rendered td{border:none; padding:8px 13px;}
+}
+
+/* Print: just the plan */
+@media print{
+  .site-header, .hero, .how, form, .sample, .site-footer, .output-toolbar .toolbar-actions, .gen-status{display:none !important;}
+  .panel{box-shadow:none; border:none; padding:0;}
+  .result.hidden{display:none;}
+  .output-toolbar{border:none;}
+}
