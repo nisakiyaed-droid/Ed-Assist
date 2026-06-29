@@ -225,9 +225,15 @@
         list("ul", ul); continue;
       }
       if (/^\s*\d+[.)]\s+/.test(line)) {
+        // Preserve the author's starting number. When bullet sub-lists split a
+        // numbered run, each piece becomes its own <ol>; without start="N" they
+        // would all restart at "1." (the bug seen in Part Two).
+        var startM = line.match(/^\s*(\d+)/);
+        var start = startM ? parseInt(startM[1], 10) : 1;
         var ol = [];
         while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) { ol.push(lines[i].replace(/^\s*\d+[.)]\s+/, "")); i++; }
-        list("ol", ol); continue;
+        out.push('<ol start="' + start + '">' + ol.map(function (x) { return "<li>" + inline(x) + "</li>"; }).join("") + "</ol>");
+        continue;
       }
       var para = [];
       while (i < lines.length && !/^\s*$/.test(lines[i]) &&
@@ -264,28 +270,37 @@
     return wrap;
   }
   function makePdfWorker() {
-    // html2canvas only captures elements that are in normal document flow, so we
-    // mount the plan inside a full-screen white overlay (hidden from the teacher)
-    // rather than off-screen — off-screen renders a blank page.
-    var stage = document.createElement("div");
-    stage.className = "pdf-stage";
-    var msg = document.createElement("div");
-    msg.className = "pdf-stage-msg";
-    msg.textContent = "Preparing your PDF…";
+    // html2canvas only captures elements in NORMAL document flow (fixed/absolute/
+    // off-screen render blank) AND mis-places the capture when the target sits in
+    // a flex/centered parent (clipped edges + top gap). So the plan is a plain
+    // top-level block at x=0, and the "Preparing…" cover is a SEPARATE fixed
+    // overlay on top — never the plan's parent.
+    var cover = document.createElement("div");
+    cover.className = "pdf-stage";
+    cover.innerHTML = '<div class="pdf-stage-msg">Preparing your PDF…</div>';
+    document.body.appendChild(cover);
     var element = buildPdfElement();
-    stage.appendChild(msg);
-    stage.appendChild(element);
-    document.body.appendChild(stage);
+    // Mount at the very TOP of the document and scroll to origin: when the
+    // captured element sits far down a long page, html2canvas leaks its offset
+    // into the canvas as a big blank top margin. Prepending + scroll(0,0) keeps
+    // the element at y≈0 so capture starts at the real content.
+    var prevScroll = window.scrollY || 0;
+    document.body.insertBefore(element, document.body.firstChild);
+    window.scrollTo(0, 0);
     var opt = {
       margin: [10, 10, 12, 10],
       filename: pdfFilename(),
       image: { type: "jpeg", quality: 0.96 },
-      html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, windowWidth: 800 },
+      html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, scrollX: 0, scrollY: 0 },
       jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       pagebreak: { mode: ["css", "legacy"] }
     };
     var worker = window.html2pdf().set(opt).from(element);
-    return { worker: worker, cleanup: function () { if (stage.parentNode) document.body.removeChild(stage); } };
+    return { worker: worker, cleanup: function () {
+      if (element.parentNode) document.body.removeChild(element);
+      if (cover.parentNode) document.body.removeChild(cover);
+      window.scrollTo(0, prevScroll);
+    } };
   }
   function downloadPdf() {
     if (!currentSessions.length || !window.html2pdf) return;

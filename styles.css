@@ -422,24 +422,44 @@ input[type="file"]:hover{border-color:var(--brand);}
    render the plan in normal flow inside a full-screen white overlay (.pdf-stage)
    that hides it from the teacher while the PDF is built. */
 .pdf-stage{position:fixed; inset:0; z-index:2000; overflow:auto;
-  background:#fff; display:flex; flex-direction:column; align-items:center;}
-.pdf-stage-msg{font-family:"Inter",system-ui,sans-serif; color:var(--navy);
+  background:#fff; display:flex; flex-direction:column; align-items:flex-start;}
+.pdf-stage-msg{align-self:center; font-family:"Inter",system-ui,sans-serif; color:var(--navy);
   font-weight:600; font-size:15px; padding:18px 0 6px;}
 .pdf-stage-msg::before{content:"⏳ ";}
-.pdf-doc{width:760px; max-width:100%; background:#fff; color:#1b2230; margin:0 auto;
+/* Pinned to the top-left (margin:0, not centered) so html2canvas captures from
+   x=0 — centering shifted the capture frame and clipped an edge. */
+.pdf-doc{width:760px; box-sizing:border-box; background:#fff; color:#1b2230; margin:0;
   font-family:"Inter",system-ui,-apple-system,Segoe UI,Roboto,sans-serif; padding:0 4px;}
 .pdf-head{padding:0 0 10px; margin-bottom:12px; border-bottom:2px solid var(--brand-soft);}
 .pdf-school{font-weight:800; color:var(--navy); font-size:18px; letter-spacing:-.01em;}
 .pdf-motto{font-size:12px; color:var(--soft); font-style:italic; margin-top:2px;}
 .pdf-plan{font-size:13px; color:var(--faint); font-weight:600; margin-top:4px;}
-.pdf-doc .plan-session{break-before:page; page-break-before:always; padding-top:6px;}
-.pdf-doc .plan-session:first-of-type{break-before:auto; page-break-before:auto; padding-top:0;}
+/* Page break ONLY between sessions — never before the first (that produced a
+   blank page 1 and a huge gap on page 2). */
+.pdf-doc .plan-session{padding-top:6px;}
+.pdf-doc .plan-session:first-of-type{padding-top:0;}
+.pdf-doc .plan-session + .plan-session{break-before:page; page-break-before:always;}
 .pdf-doc .rendered{font-size:13.5px; line-height:1.5;}
 .pdf-doc .rendered h1{font-size:19px; color:var(--navy); margin:0 0 8px;}
 .pdf-doc .rendered h2{font-size:15px; margin:13px 0 5px;}
 .pdf-doc .rendered p{margin:5px 0;}
 .pdf-doc .rendered li{margin:2px 0;}
 .pdf-doc .rendered blockquote{font-size:13.5px;}
+/* Nothing in the PDF may exceed the page width (was clipping ~10% off the right
+   edge). Force long words and tables to wrap inside the 760px box. */
+.pdf-doc, .pdf-doc * { max-width:100%; }
+.pdf-doc .rendered p, .pdf-doc .rendered li, .pdf-doc .rendered td, .pdf-doc .rendered th{
+  overflow-wrap:break-word; word-break:break-word;}
+.pdf-doc .rendered table{table-layout:fixed; width:100%; border-collapse:collapse;}
+/* Keep whole lines/rows together so they aren't sliced at a page seam. */
+.pdf-doc .rendered p, .pdf-doc .rendered li, .pdf-doc .rendered tr{
+  break-inside:avoid; page-break-inside:avoid;}
+/* The mobile stacked-table CSS must NEVER apply inside the PDF — it was collapsing
+   the misconceptions table to a single repeated "What the child says" column. */
+.pdf-doc .rendered thead{display:table-header-group !important;}
+.pdf-doc .rendered tr{display:table-row !important;}
+.pdf-doc .rendered th, .pdf-doc .rendered td{display:table-cell !important;}
+.pdf-doc .rendered td::before{content:none !important; display:none !important;}
 
 /* Print: just the plan, tight */
 @media print{

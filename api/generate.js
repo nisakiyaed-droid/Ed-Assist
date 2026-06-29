@@ -19,9 +19,34 @@ function addendum(d) {
     "Coimbatore setting, and the Evening Post.",
     "Begin with ONE Markdown '# ' heading in exactly this shape:",
     "'# Chapter <number>: <name> — Session " + d.sessionNo + " of " + d.sessions + "'.",
+    "",
+    "=== GRADE (must stay consistent) ===",
+    "This plan is for " + d.grade + ". Pitch every activity, word, and example at " + d.grade + ".",
+    "Every place the text names a grade it must say '" + d.grade + "' — never any other grade.",
+    "",
+    "=== SCOPE (do not overload young learners) ===",
+    "Teach only ONE or TWO focal skills in this session, suitable for " + d.grade + ".",
+    "Across the " + d.sessions + " sessions, spread the chapter's skills so each session has a",
+    "clear focus; treat anything already covered in earlier sessions as quick spiral review,",
+    "not new teaching. Do not cram every concept into one period.",
+    "",
+    "=== QUALITY RULES ===",
+    "- Learning Outcomes: 3-5, written as observable, measurable statements with a success",
+    "  threshold (e.g. 'match 4 of 5 synonym pairs', 'turn 3 verbs into the past tense').",
+    "- The Misconceptions table must have EXACTLY three columns and three rows:",
+    "  'What the child says | Why it happens | What the teacher does'. Fill all three columns.",
+    "- Assessment for Learning: tie each check to a specific Learning Outcome.",
+    "- Part Three must include a short closure/plenary and a quick exit ticket linked to the",
+    "  outcomes, then the Evening Post for Google Classroom.",
+    "- Make the minutes of the In-Class steps add up to the stated session length.",
+    "",
+    "=== COMPLETENESS (most important) ===",
+    "The plan is only finished when it ends with Part Three - After Class AND a complete",
+    "Evening Post. NEVER stop inside the Story. Keep earlier sections tight so you always have",
+    "room to finish Part Three and the Evening Post.",
     "Keep it comfortable to read and compact: short paragraphs, tight lists, no filler",
-    "and no empty padding. Output clean Markdown only (headings, lists, and a table for",
-    "the three misconceptions). No preamble, no sign-off."
+    "and no empty padding. Output clean Markdown only (headings, lists, and the three-column",
+    "misconceptions table). No preamble, no sign-off."
   ].join("\n");
 }
 
@@ -91,7 +116,10 @@ module.exports = async function (req, res) {
   var body = {
     systemInstruction: { parts: [{ text: FRAMEWORK + "\n\n" + addendum(d) }] },
     contents: [{ role: "user", parts: parts }],
-    generationConfig: { temperature: 0.85, maxOutputTokens: 20000 }
+    // gemini-2.5-flash is a thinking model — reasoning tokens count against this
+    // budget. 20000 was too low (the plan stopped mid-story). 40000 leaves ample
+    // room for thinking + the full plan including Part Three and the Evening Post.
+    generationConfig: { temperature: 0.85, maxOutputTokens: 40000 }
   };
 
   var url = "https://generativelanguage.googleapis.com/v1beta/models/" +
