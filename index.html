@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dr. Dasarathan International School · Lesson Planner</title>
-  <meta name="description" content="Lesson Planner for Dr. Dasarathan International School (ICSE, Coimbatore). Answer five small questions and get a complete, ready-to-teach session plan — generated right on the page, built around a story your children will love." />
+  <meta name="description" content="Upload a chapter and get a complete, ready-to-teach session plan as a PDF — built for Dr. Dasarathan International School (ICSE, Coimbatore)." />
   <link rel="icon" type="image/png" href="assets/school-mark.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -27,28 +27,27 @@
     <!-- HERO -->
     <section class="hero">
       <span class="eyebrow">Inspire… Explore… Excel…</span>
-      <h1>A full lesson plan in minutes.</h1>
+      <h1>Upload a chapter. Get a lesson plan.</h1>
       <p class="lead">
-        Answer five small questions, add your chapter, and get a complete,
-        ready-to-teach session plan — written right here on the page, around a
-        story your children will love.
+        Add the chapter pages and pick the session. You'll get a complete,
+        ready-to-teach plan as a PDF — built around a story your children will love,
+        and ready to share on WhatsApp.
       </p>
       <div class="hero-actions">
         <a href="#start" class="btn primary">Make a lesson plan</a>
         <a href="#sample" class="btn ghost">See a sample plan</a>
       </div>
-      <p class="free-note">Works with your school's Gemini key · Plans appear on this page</p>
+      <p class="free-note">Set up for your school · No key or login for teachers</p>
     </section>
 
     <!-- HOW IT WORKS -->
     <section class="how">
       <h2>How it works</h2>
-      <p class="section-sub">Four calm steps from a blank page to a plan you can teach.</p>
-      <div class="steps">
-        <div class="step-card"><span class="num">1</span><strong>Answer 5 questions</strong><span>Chapter number, name, grade, subject, and which session.</span></div>
-        <div class="step-card"><span class="num">2</span><strong>Add your chapter</strong><span>Upload a scan or photos of the chapter pages (optional).</span></div>
-        <div class="step-card"><span class="num">3</span><strong>Press Generate</strong><span>The school's Gemini key writes the full session plan for you.</span></div>
-        <div class="step-card"><span class="num">4</span><strong>Teach or print</strong><span>The plan appears here in your colours — print it as a PDF.</span></div>
+      <p class="section-sub">Three calm steps from a chapter to a plan you can teach.</p>
+      <div class="steps steps-3">
+        <div class="step-card"><span class="num">1</span><strong>Upload the chapter</strong><span>A scan or photos of the chapter pages. The planner reads the chapter name and number for you.</span></div>
+        <div class="step-card"><span class="num">2</span><strong>Pick the session</strong><span>Choose the grade, subject, and which session you're teaching.</span></div>
+        <div class="step-card"><span class="num">3</span><strong>Get your PDF</strong><span>A full plan appears — download it as a PDF or share it on WhatsApp.</span></div>
       </div>
     </section>
 
@@ -56,21 +55,14 @@
     <section class="start" id="start">
       <div class="panel">
         <h2 style="text-align:left">Make a lesson plan</h2>
-        <p class="subtle">Fill in a few details and press Generate. Nothing is saved online — your key stays on this device.</p>
+        <p class="subtle">Upload the chapter, choose a few details, and press Generate.</p>
 
         <form id="chapter-form" autocomplete="off" novalidate>
-          <div class="field-row">
-            <label class="field" id="field-chapterNo">
-              <span class="field-label">Chapter number <span class="req">*</span></span>
-              <input type="text" id="chapterNo" placeholder="e.g. 7" required aria-required="true" />
-              <span class="field-error">Please add a chapter number.</span>
-            </label>
-            <label class="field" id="field-chapterName">
-              <span class="field-label">Chapter name <span class="req">*</span></span>
-              <input type="text" id="chapterName" placeholder="e.g. Plants Around Us" required aria-required="true" />
-              <span class="field-error">Please add a chapter name.</span>
-            </label>
-          </div>
+          <label class="field" id="field-chapterFile">
+            <span class="field-label">Chapter pages <span class="req">*</span> <span class="hint">(PDF or photos — the planner reads the chapter name and number)</span></span>
+            <input type="file" id="chapterFile" accept="application/pdf,image/*" multiple required aria-required="true" />
+            <span class="field-error" role="alert">Please add the chapter pages first.</span>
+          </label>
 
           <div class="field-row three">
             <label class="field">
@@ -102,83 +94,30 @@
             </label>
           </div>
 
-          <div class="field-row">
-            <label class="field">
-              <span class="field-label">Which session to generate now?</span>
-              <select id="sessionNo">
-                <option selected>1</option><option>2</option><option>3</option>
-                <option>4</option><option>5</option><option>6</option>
-                <option>7</option><option>8</option>
-              </select>
-            </label>
-            <label class="field">
-              <span class="field-label">Chapter pages <span class="hint">(optional — PDF or photos)</span></span>
-              <input type="file" id="chapterFile" accept="application/pdf,image/*" multiple />
-            </label>
-          </div>
+          <label class="field third">
+            <span class="field-label">Which session to make now?</span>
+            <select id="sessionNo">
+              <option selected>1</option><option>2</option><option>3</option>
+              <option>4</option><option>5</option><option>6</option>
+              <option>7</option><option>8</option>
+            </select>
+          </label>
 
-          <!-- AI settings -->
-          <details class="ai-settings" id="aiSettings">
-            <summary>🔑 Gemini key &amp; model <span class="key-state" id="keyState">— key needed</span></summary>
-            <div class="ai-body">
-              <label class="field">
-                <span class="field-label">Your school's Gemini API key</span>
-                <div class="keyrow">
-                  <input type="password" id="apiKey" placeholder="Paste the Gemini key here" autocomplete="off" />
-                  <button type="button" class="btn small ghost" id="forgetKey">Forget</button>
-                </div>
-                <label class="remember"><input type="checkbox" id="rememberKey" /> Remember on this device</label>
-              </label>
-              <p class="key-note">🔒 Your key stays in this browser, on this device. It is sent only to Google to write your plan — never to us, never saved online, never put in the code. Get a key at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com/app/apikey</a>.</p>
-              <label class="field">
-                <span class="field-label">Model</span>
-                <select id="model">
-                  <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash — fast &amp; low cost</option>
-                  <option value="gemini-2.5-pro">Gemini 2.5 Pro — best quality</option>
-                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                  <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                  <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                </select>
-              </label>
-            </div>
-          </details>
-
-          <button type="submit" class="btn primary full" id="generateAiBtn">Generate lesson plan</button>
-          <button type="button" class="btn ghost full" id="starterBtn" style="margin-top:10px">Or build a copy-paste message instead</button>
+          <button type="submit" class="btn primary full" id="generateBtn">Generate lesson plan</button>
         </form>
 
         <!-- GENERATED PLAN -->
-        <div id="planResult" class="result hidden" aria-live="polite">
+        <div id="planResult" class="result hidden">
           <div class="output-toolbar">
             <h3 id="planTitle">Your lesson plan</h3>
             <div class="toolbar-actions">
-              <button type="button" class="btn small ghost" id="copyPlanBtn">Copy</button>
-              <button type="button" class="btn small ghost" id="printPlanBtn">Print / PDF</button>
+              <button type="button" class="btn small primary" id="pdfBtn" disabled>Download PDF</button>
+              <button type="button" class="btn small ghost" id="waBtn" disabled>Share on WhatsApp</button>
+              <button type="button" class="btn small ghost" id="printPlanBtn" disabled>Print</button>
             </div>
           </div>
-          <div id="genStatus" class="gen-status hidden"></div>
-          <div id="planBody" class="rendered"></div>
-        </div>
-
-        <!-- STARTER MESSAGE (fallback) -->
-        <div id="result" class="result hidden" aria-live="polite">
-          <h3>Your starter message</h3>
-          <p class="subtle">Copy this and paste it into a new Claude chat. <strong>Before you send it, attach the two files below.</strong></p>
-          <div class="starter-wrap">
-            <pre id="starter" class="starter"></pre>
-          </div>
-          <div class="result-actions">
-            <button type="button" class="btn small primary" id="copyBtn">Copy message</button>
-            <a class="btn small ghost" id="frameworkLink" href="docs/framework/4-lesson-plan-framework-v1.1.md" download>Download the Framework</a>
-            <a class="btn small ghost" href="https://claude.ai" target="_blank" rel="noopener">Open Claude</a>
-          </div>
-          <div class="checklist">
-            <strong>Before you send, attach:</strong>
-            <ol>
-              <li>📄 <strong>The Framework</strong> — the file you just downloaded (the same one each chapter).</li>
-              <li>📚 <strong>Your chapter pages</strong> — a scan or photo of the chapter from your textbook.</li>
-            </ol>
-          </div>
+          <div id="genStatus" class="gen-status hidden" role="status" aria-live="assertive"></div>
+          <div id="planBody" class="rendered" aria-live="polite"></div>
         </div>
       </div>
     </section>
@@ -186,7 +125,7 @@
     <!-- SAMPLE -->
     <section class="sample" id="sample">
       <h2>See a sample plan</h2>
-      <p class="section-sub">A real session plan made by the system — colours, story, and all.</p>
+      <p class="section-sub">A real session plan made by the planner — colours, story, and all.</p>
       <a class="sample-frame" href="docs/preview/session-plan-preview.html" target="_blank" rel="noopener">
         <img src="docs/preview/session-plan-preview.png" alt="A sample session plan, fully coloured" />
         <span class="sample-open">Open the full sample ↗</span>
@@ -201,6 +140,7 @@
     <span class="footer-meta">ICSE · Coimbatore · Lesson Planner · Powered by Ed-Assist</span>
   </footer>
 
+  <script src="assets/vendor/html2pdf.bundle.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,226 +1,111 @@
 /* Ed-Assist — Dr. Dasarathan International School · Lesson Planner
  *
- * Generates a complete session plan on the page using the school's Gemini key.
- * The key is the teacher's own: it is kept only in this browser (optionally in
- * localStorage on this device) and is sent only to Google. It is never sent to
- * us, never committed to the code, and never stored online.
- *
- * It still offers the older "copy-paste message for Claude" path as a fallback.
+ * Teachers upload a chapter and get a complete session plan. The school's
+ * Gemini key lives in the backend (Vercel env var) — teachers never see it.
+ * The plan downloads as a real PDF and can be shared on WhatsApp.
  */
 (function () {
   "use strict";
-
   function el(id) { return document.getElementById(id); }
-  var KEY_STORE = "edassist_gemini_key";
+  var MAX_BYTES = 3 * 1024 * 1024; // keep the upload under the server limit
 
-  // ---- Framework (the engine) -------------------------------------------
-  // Fetched from the hosted Markdown file; a compact fallback keeps the app
-  // working even if the fetch fails (e.g. opened from a local file).
-  var FRAMEWORK_FALLBACK = [
-    "You are an expert primary curriculum designer for an ICSE school in India (Grades 1–5;",
-    "English, Mathematics, Environmental Studies, Social Studies). Sessions run 40 minutes; medium is English.",
-    "Write everything in full — no acronyms (always 'Assessment for Learning'); short, warm, jargon-free sentences.",
-    "",
-    "Root all stories and examples in India, letting the setting follow the content, with a gentle South-Indian / Tamil Nadu lean.",
-    "Keep one story character across the chapter; carry local colour through place, character, food and festival — always in English.",
-    "",
-    "Each session plan has THREE labelled parts:",
-    "PART ONE — Before Class: Learning Outcomes (3–5, with one thinking and one values outcome); Prerequisites Check;",
-    "  exactly three Anticipated Misconceptions (what the child says / why / what the teacher does); four or five likely",
-    "  student questions with deepening responses; a Questioning Technique guide; one support and one extension; a Teaching",
-    "  Aids checklist; choosing the level (Enhanced is the everyday default); a short self-check.",
-    "PART TWO — During Class: lead with the Enhanced sequence (~35 min), each step numbered with a minute estimate that sums",
-    "  to the level target. The six Core essentials, in order: Prior Knowledge Activation, Teach the Concept, Class Activity,",
-    "  Assessment for Learning (written + oral + physical), The Story, Takeaway. Always reach the Story and the Takeaway.",
-    "  Give Core and Full as short reference lists; Full adds one genuine Cross-curricular link and one 'Did You Know?'.",
-    "  The Story ends with a line answering the essential question plus one follow-on question.",
-    "PART THREE — After Class: six reflection questions, then the Evening Post — a ready-to-paste Google Classroom block in",
-    "  two layers (quick glance: today's chart, home task, follow-on question; read-more: full story, new words, amazing fact).",
-    "",
-    "Three warm levels: Core (~25 min), Enhanced (~35 min, default), Full (40 min)."
-  ].join("\n");
-
-  var frameworkPromise = null;
-  function getFramework() {
-    if (frameworkPromise) return frameworkPromise;
-    frameworkPromise = fetch("docs/framework/4-lesson-plan-framework-v1.1.md")
-      .then(function (r) { if (!r.ok) throw new Error("no framework"); return r.text(); })
-      .catch(function () { return FRAMEWORK_FALLBACK; });
-    return frameworkPromise;
-  }
-
-  // ---- Key handling -----------------------------------------------------
-  function loadSavedKey() {
-    var saved = "";
-    try { saved = localStorage.getItem(KEY_STORE) || ""; } catch (e) {}
-    if (saved) { el("apiKey").value = saved; el("rememberKey").checked = true; }
-    refreshKeyState();
-  }
-  function refreshKeyState() {
-    var has = el("apiKey").value.trim() !== "";
-    el("keyState").textContent = has ? "✓ key set" : "— key needed";
-    el("keyState").classList.toggle("ok", has);
-    if (!has) el("aiSettings").open = true;
-  }
-  function persistKeyIfWanted() {
-    try {
-      if (el("rememberKey").checked && el("apiKey").value.trim()) {
-        localStorage.setItem(KEY_STORE, el("apiKey").value.trim());
-      } else {
-        localStorage.removeItem(KEY_STORE);
-      }
-    } catch (e) {}
-  }
-  function forgetKey() {
-    el("apiKey").value = "";
-    el("rememberKey").checked = false;
-    try { localStorage.removeItem(KEY_STORE); } catch (e) {}
-    refreshKeyState();
-  }
-
-  // ---- Files → base64 ---------------------------------------------------
-  function fileToPart(file) {
+  // ---- Files → inline parts --------------------------------------------
+  function fileToInline(file) {
     return new Promise(function (resolve, reject) {
-      var reader = new FileReader();
-      reader.onload = function () {
-        var data = String(reader.result).split(",")[1] || "";
-        resolve({ inlineData: { mimeType: file.type || "application/octet-stream", data: data } });
+      var r = new FileReader();
+      r.onload = function () {
+        resolve({ mimeType: file.type || "application/octet-stream", data: String(r.result).split(",")[1] || "" });
       };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+      r.onerror = reject;
+      r.readAsDataURL(file);
     });
   }
 
-  // ---- Prompts ----------------------------------------------------------
-  function operatingAddendum() {
-    return [
-      "",
-      "=== HOW TO RESPOND IN THIS APP ===",
-      "You are generating ONE complete, ready-to-teach session plan in a single reply.",
-      "There is no back-and-forth here, so do not ask questions and do not wait for approval.",
-      "If chapter pages are attached, base the plan on them; if not, use the chapter name and your",
-      "knowledge of a typical ICSE primary chapter. Produce the full plan for the requested session,",
-      "using the three labelled parts (Part One — Before Class; Part Two — During Class, with the",
-      "Enhanced sequence leading; Part Three — After Class), the warm house style, a Story grounded",
-      "in an Indian / Tamil Nadu setting (the school is in Coimbatore), and the Evening Post.",
-      "Begin directly with the session title as a Markdown '#' heading. Output clean Markdown only",
-      "(headings, lists, and a table for the three misconceptions). No preamble, no sign-off."
-    ].join("\n");
-  }
-
-  function userMessage(d) {
-    return [
-      "School: Dr. Dasarathan International School, Coimbatore, Tamil Nadu (ICSE).",
-      "Chapter Number: " + d.chapterNo,
-      "Chapter Name: " + d.chapterName,
-      "Grade: " + d.grade,
-      "Subject: " + d.subject,
-      "Total Sessions: " + d.sessions,
-      "Generate: Session " + d.sessionNo + " of " + d.sessions + ".",
-      "",
-      "Please write the complete Session " + d.sessionNo + " plan now."
-    ].join("\n");
-  }
-
-  // ---- Gemini call ------------------------------------------------------
-  function callGemini(key, model, systemText, parts) {
-    var url = "https://generativelanguage.googleapis.com/v1beta/models/" +
-      encodeURIComponent(model) + ":generateContent?key=" + encodeURIComponent(key);
-    var body = {
-      systemInstruction: { parts: [{ text: systemText }] },
-      contents: [{ role: "user", parts: parts }],
-      generationConfig: { temperature: 0.85, maxOutputTokens: 16000 }
-    };
-    return fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    }).then(function (res) {
-      return res.json().then(function (json) {
-        if (!res.ok) {
-          var msg = (json && json.error && json.error.message) || ("Request failed (" + res.status + ")");
-          throw new Error(msg);
-        }
-        if (json.promptFeedback && json.promptFeedback.blockReason) {
-          throw new Error("The request was blocked (" + json.promptFeedback.blockReason + "). Try rephrasing.");
-        }
-        var cand = json.candidates && json.candidates[0];
-        if (!cand || !cand.content || !cand.content.parts) {
-          throw new Error("No plan was returned. Please try again.");
-        }
-        return cand.content.parts.map(function (p) { return p.text || ""; }).join("");
-      });
-    });
-  }
-
-  // ---- Generate flow ----------------------------------------------------
-  function check(inputId, fieldId) {
-    var ok = el(inputId).value.trim() !== "";
-    el(fieldId).classList.toggle("invalid", !ok);
-    return ok;
-  }
-
+  // ---- Status + state ---------------------------------------------------
   function setStatus(text, kind) {
     var s = el("genStatus");
     s.className = "gen-status " + (kind || "");
     s.textContent = text;
     s.classList.remove("hidden");
   }
+  function setButtonsEnabled(on) {
+    el("pdfBtn").disabled = !on;
+    el("waBtn").disabled = !on;
+    el("printPlanBtn").disabled = !on;
+  }
 
-  function handleGenerate(e) {
+  // ---- Generate ---------------------------------------------------------
+  var planTitleText = "Lesson plan";
+
+  function handleSubmit(e) {
     e.preventDefault();
-    var noOk = check("chapterNo", "field-chapterNo");
-    var nameOk = check("chapterName", "field-chapterName");
-    if (!noOk) { el("chapterNo").focus(); return; }
-    if (!nameOk) { el("chapterName").focus(); return; }
-
-    var key = el("apiKey").value.trim();
-    if (!key) {
-      el("aiSettings").open = true;
-      el("apiKey").focus();
-      el("planResult").classList.remove("hidden");
-      el("planBody").innerHTML = "";
-      setStatus("Please add the school's Gemini key above, then press Generate.", "warn");
+    var files = el("chapterFile").files;
+    var field = el("field-chapterFile");
+    if (!files || !files.length) {
+      field.classList.add("invalid");
+      el("chapterFile").focus();
       return;
     }
-    persistKeyIfWanted();
-    refreshKeyState();
+    field.classList.remove("invalid");
+
+    var total = 0;
+    for (var i = 0; i < files.length; i++) total += files[i].size;
+    if (total > MAX_BYTES) {
+      el("planResult").classList.remove("hidden");
+      el("planBody").innerHTML = "";
+      setButtonsEnabled(false);
+      setStatus("Your upload is " + (total / 1048576).toFixed(1) + " MB. Please keep it under 3 MB — try a PDF, or fewer / smaller photos.", "warn");
+      el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
 
     var data = {
-      chapterNo: el("chapterNo").value.trim(),
-      chapterName: el("chapterName").value.trim(),
       grade: el("grade").value,
       subject: el("subject").value,
       sessions: el("sessions").value,
       sessionNo: el("sessionNo").value
     };
 
-    var btn = el("generateAiBtn");
+    var btn = el("generateBtn");
     btn.disabled = true;
     var oldLabel = btn.textContent;
     btn.textContent = "Generating…";
     el("planResult").classList.remove("hidden");
-    el("result").classList.add("hidden");
     el("planBody").innerHTML = "";
-    el("planTitle").textContent = "Session " + data.sessionNo + " — " + data.chapterName;
+    setButtonsEnabled(false);
+    el("planTitle").textContent = data.grade + " · " + data.subject + " · Session " + data.sessionNo;
     setStatus("Reading your chapter and writing the plan… this can take up to a minute.", "busy");
     el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
 
-    var files = el("chapterFile").files;
-    var fileJobs = [];
-    for (var i = 0; i < files.length; i++) fileJobs.push(fileToPart(files[i]));
+    var jobs = [];
+    for (var j = 0; j < files.length; j++) jobs.push(fileToInline(files[j]));
 
-    Promise.all([getFramework(), Promise.all(fileJobs)]).then(function (out) {
-      var framework = out[0];
-      var fileParts = out[1];
-      var systemText = framework + "\n\n" + operatingAddendum();
-      var parts = [{ text: userMessage(data) }].concat(fileParts);
-      return callGemini(key, el("model").value, systemText, parts);
-    }).then(function (markdown) {
+    Promise.all(jobs).then(function (parts) {
+      data.files = parts;
+      return fetch("api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+    }).then(function (res) {
+      return res.text().then(function (raw) {
+        var json; try { json = JSON.parse(raw); } catch (e) { json = null; }
+        if (!res.ok || !json) {
+          if (res.status === 404 || res.status === 405 || !json) {
+            throw new Error("This page shows the planner, but the school's generator isn't connected here yet. Please open the school's Lesson Planner link (the one set up on Vercel).");
+          }
+          throw new Error((json && json.error) || ("Request failed (" + res.status + ")."));
+        }
+        return json;
+      });
+    }).then(function (json) {
       el("genStatus").classList.add("hidden");
-      renderPlan(markdown);
+      renderPlan(json.markdown, json.truncated);
+      setButtonsEnabled(true);
     }).catch(function (err) {
-      setStatus("Couldn't generate the plan: " + err.message, "error");
+      var msg = err && err.message ? err.message : "Something went wrong.";
+      if (/Failed to fetch|NetworkError/i.test(msg)) msg = "Couldn't reach the planner. Please check your internet and try again.";
+      setStatus(msg, "error");
     }).then(function () {
       btn.disabled = false;
       btn.textContent = oldLabel;
@@ -228,14 +113,18 @@
   }
 
   var lastMarkdown = "";
-  function renderPlan(markdown) {
-    lastMarkdown = markdown;
-    el("planBody").innerHTML = mdToHtml(markdown);
+  function renderPlan(markdown, truncated) {
+    lastMarkdown = markdown || "";
+    var banner = truncated
+      ? '<div class="trunc-note">⚠️ This plan may have stopped early. You can press Generate again, or pick a shorter session.</div>'
+      : "";
+    el("planBody").innerHTML = banner + mdToHtml(lastMarkdown);
+    var h1 = el("planBody").querySelector("h1");
+    planTitleText = h1 ? h1.textContent : "Lesson plan";
+    el("planTitle").textContent = planTitleText;
   }
 
-  // ---- Tiny, safe Markdown renderer (no external dependency) ------------
-  // Escapes all raw HTML, then emits only a fixed set of tags from Markdown
-  // syntax — so there is no injection path even though the text comes from AI.
+  // ---- Safe Markdown renderer (no external dependency) ------------------
   function esc(s) {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -250,55 +139,46 @@
   }
   function isTableSep(line) { return /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(line) && line.indexOf("-") !== -1; }
   function cells(line) {
-    var s = line.trim().replace(/^\|/, "").replace(/\|$/, "");
-    return s.split("|").map(function (c) { return c.trim(); });
+    return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(function (c) { return c.trim(); });
   }
   function mdToHtml(md) {
     var lines = String(md).replace(/\r\n/g, "\n").split("\n");
     var out = [], i = 0;
-    function flushList(tag, items) {
+    function list(tag, items) {
       out.push("<" + tag + ">" + items.map(function (x) { return "<li>" + inline(x) + "</li>"; }).join("") + "</" + tag + ">");
     }
     while (i < lines.length) {
       var line = lines[i];
       if (/^\s*$/.test(line)) { i++; continue; }
-      // Horizontal rule
       if (/^\s*([-*_])\1{2,}\s*$/.test(line)) { out.push("<hr/>"); i++; continue; }
-      // Heading
       var h = line.match(/^(#{1,6})\s+(.*)$/);
       if (h) { var lv = h[1].length; out.push("<h" + lv + ">" + inline(h[2]) + "</h" + lv + ">"); i++; continue; }
-      // Table
       if (line.indexOf("|") !== -1 && i + 1 < lines.length && isTableSep(lines[i + 1])) {
-        var head = cells(line), rows = [];
-        i += 2;
+        var head = cells(line), rows = []; i += 2;
         while (i < lines.length && lines[i].indexOf("|") !== -1 && !/^\s*$/.test(lines[i])) { rows.push(cells(lines[i])); i++; }
         var th = "<thead><tr>" + head.map(function (c) { return "<th>" + inline(c) + "</th>"; }).join("") + "</tr></thead>";
         var tb = "<tbody>" + rows.map(function (r) {
-          return "<tr>" + r.map(function (c) { return "<td>" + inline(c) + "</td>"; }).join("") + "</tr>";
+          return "<tr>" + r.map(function (c, ci) {
+            return '<td data-label="' + esc(head[ci] || "") + '">' + inline(c) + "</td>";
+          }).join("") + "</tr>";
         }).join("") + "</tbody>";
-        out.push("<table>" + th + tb + "</table>");
-        continue;
+        out.push("<table>" + th + tb + "</table>"); continue;
       }
-      // Blockquote
       if (/^\s*>\s?/.test(line)) {
         var q = [];
         while (i < lines.length && /^\s*>\s?/.test(lines[i])) { q.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
-        out.push("<blockquote>" + q.map(function (x) { return x === "" ? "<br/>" : inline(x); }).join(" ") + "</blockquote>");
-        continue;
+        out.push("<blockquote>" + q.map(function (x) { return x === "" ? "<br/>" : inline(x); }).join(" ") + "</blockquote>"); continue;
       }
-      // Unordered list
       if (/^\s*[-*+]\s+/.test(line)) {
         var ul = [];
         while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) { ul.push(lines[i].replace(/^\s*[-*+]\s+/, "")); i++; }
-        flushList("ul", ul); continue;
+        list("ul", ul); continue;
       }
-      // Ordered list
       if (/^\s*\d+[.)]\s+/.test(line)) {
         var ol = [];
         while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) { ol.push(lines[i].replace(/^\s*\d+[.)]\s+/, "")); i++; }
-        flushList("ol", ol); continue;
+        list("ol", ol); continue;
       }
-      // Paragraph (gather until blank line)
       var para = [];
       while (i < lines.length && !/^\s*$/.test(lines[i]) &&
         !/^(#{1,6})\s+/.test(lines[i]) && !/^\s*[-*+]\s+/.test(lines[i]) &&
@@ -311,68 +191,70 @@
     return out.join("\n");
   }
 
-  function copyPlan() {
-    if (!lastMarkdown) return;
-    navigator.clipboard.writeText(lastMarkdown).then(function () {
-      var b = el("copyPlanBtn"); var old = b.textContent;
-      b.textContent = "Copied ✓"; setTimeout(function () { b.textContent = old; }, 1500);
-    });
+  // ---- PDF (real file) --------------------------------------------------
+  function pdfFilename() {
+    var t = planTitleText.replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").slice(0, 60) || "lesson-plan";
+    return "DDIS-" + t + ".pdf";
   }
-
-  // ---- Starter-message fallback (copy-paste to Claude) ------------------
-  function buildStarter(d) {
-    return [
-      "Hello! I teach at Dr. Dasarathan International School, an ICSE school in",
-      "Coimbatore, Tamil Nadu. I would like to plan a chapter. Here are my details:",
-      "",
-      "• Chapter Number: " + d.chapterNo,
-      "• Chapter Name: " + d.chapterName,
-      "• Grade: " + d.grade,
-      "• Subject: " + d.subject,
-      "• Total Sessions: " + d.sessions,
-      "",
-      "I have attached the Lesson Plan Generation Framework and the scanned pages",
-      "of the chapter. Please follow the Framework: start with Step 0 and confirm",
-      "the chapter with me before building anything."
-    ].join("\n");
+  function buildPdfElement() {
+    var wrap = document.createElement("div");
+    wrap.className = "pdf-doc";
+    wrap.innerHTML =
+      '<div class="pdf-head">' +
+        '<img src="assets/school-mark.png" alt="" />' +
+        '<div><div class="pdf-school">Dr. Dasarathan International School</div>' +
+        '<div class="pdf-motto">Inspire… Explore… Excel… · ICSE, Coimbatore</div></div>' +
+      '</div>' +
+      '<div class="rendered">' + mdToHtml(lastMarkdown) + '</div>';
+    return wrap;
   }
-  function showStarter() {
-    var noOk = check("chapterNo", "field-chapterNo");
-    var nameOk = check("chapterName", "field-chapterName");
-    if (!noOk) { el("chapterNo").focus(); return; }
-    if (!nameOk) { el("chapterName").focus(); return; }
-    var data = {
-      chapterNo: el("chapterNo").value.trim(),
-      chapterName: el("chapterName").value.trim(),
-      grade: el("grade").value, subject: el("subject").value, sessions: el("sessions").value
+  function makePdfWorker() {
+    var element = buildPdfElement();
+    document.body.appendChild(element);
+    var opt = {
+      margin: [10, 10, 12, 10],
+      filename: pdfFilename(),
+      image: { type: "jpeg", quality: 0.96 },
+      html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, windowWidth: 800 },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      pagebreak: { mode: ["css", "legacy"] }
     };
-    el("starter").textContent = buildStarter(data);
-    el("planResult").classList.add("hidden");
-    el("result").classList.remove("hidden");
-    el("result").scrollIntoView({ behavior: "smooth", block: "start" });
+    var worker = window.html2pdf().set(opt).from(element);
+    return { worker: worker, cleanup: function () { document.body.removeChild(element); } };
   }
-  function copyStarter() {
-    navigator.clipboard.writeText(el("starter").textContent).then(function () {
-      var b = el("copyBtn"); var old = b.textContent;
-      b.textContent = "Copied ✓"; setTimeout(function () { b.textContent = old; }, 1500);
-    });
+  function downloadPdf() {
+    if (!lastMarkdown || !window.html2pdf) return;
+    var j = makePdfWorker();
+    j.worker.save().then(j.cleanup, j.cleanup);
+  }
+  function sharePdf() {
+    if (!lastMarkdown || !window.html2pdf) return;
+    var j = makePdfWorker();
+    j.worker.outputPdf("blob").then(function (blob) {
+      j.cleanup();
+      var file = new File([blob], pdfFilename(), { type: "application/pdf" });
+      var text = planTitleText + " — lesson plan from Dr. Dasarathan International School.";
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        navigator.share({ files: [file], title: planTitleText, text: text }).catch(function () {});
+      } else {
+        // Fallback: save the PDF, then open WhatsApp to attach it.
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a"); a.href = url; a.download = pdfFilename();
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+        window.open("https://wa.me/?text=" + encodeURIComponent(text + " (The PDF has been saved to your device — attach it in WhatsApp.)"), "_blank");
+      }
+    }, function () { j.cleanup(); });
   }
 
   // ---- Wiring -----------------------------------------------------------
   document.addEventListener("DOMContentLoaded", function () {
-    loadSavedKey();
-    el("chapter-form").addEventListener("submit", handleGenerate);
-    el("starterBtn").addEventListener("click", showStarter);
-    el("copyBtn").addEventListener("click", copyStarter);
-    el("copyPlanBtn").addEventListener("click", copyPlan);
+    el("chapter-form").addEventListener("submit", handleSubmit);
+    el("pdfBtn").addEventListener("click", downloadPdf);
+    el("waBtn").addEventListener("click", sharePdf);
     el("printPlanBtn").addEventListener("click", function () { window.print(); });
-    el("forgetKey").addEventListener("click", forgetKey);
-    el("apiKey").addEventListener("input", refreshKeyState);
-    el("rememberKey").addEventListener("change", persistKeyIfWanted);
-    [["chapterNo", "field-chapterNo"], ["chapterName", "field-chapterName"]].forEach(function (p) {
-      el(p[0]).addEventListener("input", function () {
-        if (el(p[0]).value.trim() !== "") el(p[1]).classList.remove("invalid");
-      });
+    el("chapterFile").addEventListener("change", function () {
+      if (el("chapterFile").files.length) el("field-chapterFile").classList.remove("invalid");
     });
   });
 })();
