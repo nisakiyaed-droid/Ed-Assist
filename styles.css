@@ -411,6 +411,66 @@ input[type="file"]:hover{border-color:var(--brand);}
   .rendered td:first-child{color:var(--purple); font-weight:600;}
 }
 
+/* ===================================================================
+   HOUSE-STYLE COLOUR LAYER — ported from docs/preview/session-plan-preview.html
+   so generated plans look like the designed sample (coloured part banners,
+   step cards with time pills, story / evening-post boxes, styled table).
+   Applies on-screen AND in the PDF (.pdf-doc .rendered inherits these).
+   =================================================================== */
+.rendered{
+  --green:#2E7D32; --blue:#1565C0; --purple:#6A1B9A; --orange:#E65100; --teal:#00796B;
+  --p1bg:#eaf1fd; --p2bg:#e9f4ea; --p3bg:#f4ecf9; --softbg:#f6f7fb; --hairline:#e7eaf1;
+}
+/* Coloured part banners */
+.rendered .part{border-radius:9px; padding:11px 15px; font-weight:700; font-size:16px;
+  margin:22px 0 12px; display:flex; align-items:center; gap:9px; letter-spacing:-.01em; break-inside:avoid;}
+.rendered .part .ico{font-size:17px;}
+.rendered .part-1{background:var(--p1bg); color:var(--blue);}
+.rendered .part-2{background:var(--p2bg); color:var(--green);}
+.rendered .part-3{background:var(--p3bg); color:var(--purple);}
+/* Sub-section labels (small uppercase) */
+.rendered h3{font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:#8b93a7;
+  font-weight:700; margin:18px 0 7px;}
+/* Chapter-progress callout */
+.rendered .progress{background:var(--p1bg); border:1px solid #d6e3fb; border-left:4px solid var(--blue);
+  border-radius:9px; padding:11px 14px; font-size:14px; color:#39425a; margin:6px 0 18px; break-inside:avoid;}
+.rendered .progress b{color:var(--blue);}
+/* Step cards with a time pill */
+.rendered .step{display:grid; grid-template-columns:64px 1fr; gap:13px; align-items:start;
+  padding:11px 14px; border:1px solid var(--hairline); border-radius:12px; background:#fff;
+  margin:8px 0; break-inside:avoid;}
+.rendered .step .t{font-weight:800; font-size:12.5px; color:var(--green); background:var(--p2bg);
+  border-radius:999px; padding:5px 6px; text-align:center; white-space:nowrap;}
+.rendered .step .b{display:block; font-size:15px; font-weight:700; letter-spacing:-.01em; margin-bottom:2px;}
+.rendered .step .d{color:#5e6880; font-size:14px; line-height:1.5;}
+/* Story box (warm serif) */
+.rendered .story{border:1px solid #ead9f4; border-left:4px solid var(--purple); background:#fbf7fe;
+  border-radius:12px; padding:15px 18px; margin:14px 0; break-inside:avoid;}
+.rendered .story .label{color:var(--purple); font-weight:700; font-size:13px; margin-bottom:7px;}
+.rendered .story p{font-family:"Lora",Georgia,"Times New Roman",serif; font-size:16px; line-height:1.7; color:#2a2330; margin:7px 0;}
+.rendered .story p em, .rendered .story p i{color:var(--purple);}
+/* Did-You-Know (orange) and Cross-curricular (teal) */
+.rendered .dyk{border:1px solid #f4dcc4; border-left:4px solid var(--orange); background:#fff7ef;
+  border-radius:12px; padding:12px 15px; margin:12px 0; font-size:14.5px; break-inside:avoid;}
+.rendered .dyk .label{color:var(--orange); font-weight:700;}
+/* Evening-post box */
+.rendered .post{border:1px solid var(--hairline); border-radius:12px; padding:14px 16px;
+  background:var(--softbg); margin:10px 0; font-size:14.5px; break-inside:avoid;}
+.rendered .post p{margin:8px 0;}
+/* Misconceptions / any table — coloured header, rounded, hairlines */
+.rendered table{width:100%; border-collapse:separate; border-spacing:0; font-size:14px; margin:10px 0;
+  border:1px solid var(--hairline); border-radius:12px; overflow:hidden;}
+.rendered th, .rendered td{padding:10px 12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--hairline);}
+.rendered th{background:var(--softbg); font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:#5e6880; font-weight:700;}
+.rendered tr:last-child td{border-bottom:none;}
+.rendered td:first-child{font-weight:600; color:#1b2230;}
+/* Cue legend pills */
+.rendered .cues{display:flex; flex-wrap:wrap; gap:7px; margin:6px 0 4px;}
+.rendered .cue{font-size:12px; font-weight:700; padding:4px 11px; border-radius:999px; color:#fff;}
+.rendered .cue.c-green{background:var(--green);} .rendered .cue.c-blue{background:var(--blue);}
+.rendered .cue.c-purple{background:var(--purple);} .rendered .cue.c-orange{background:var(--orange);}
+.rendered .cue.c-teal{background:var(--teal);}
+
 /* On-screen divider between sessions */
 .plan-session + .plan-session{margin-top:26px; padding-top:22px; border-top:2px dashed var(--brand-soft);}
 

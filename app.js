@@ -191,18 +191,68 @@
   function cells(line) {
     return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(function (c) { return c.trim(); });
   }
+  // Map a Part heading to its colour + icon (house style).
+  function partKind(t) {
+    if (/^part\s*one\b/i.test(t) || /before\s+class/i.test(t)) return { n: 1, ico: "📋" };
+    if (/^part\s*two\b/i.test(t) || /during\s+class/i.test(t)) return { n: 2, ico: "🍎" };
+    if (/^part\s*three\b/i.test(t) || /after\s+class/i.test(t)) return { n: 3, ico: "🌙" };
+    return null;
+  }
   function mdToHtml(md) {
     var lines = String(md).replace(/\r\n/g, "\n").split("\n");
     var out = [], i = 0;
     function list(tag, items) {
       out.push("<" + tag + ">" + items.map(function (x) { return "<li>" + inline(x) + "</li>"; }).join("") + "</" + tag + ">");
     }
+    // Collect lines until the next heading of level <= `level` (used to wrap a
+    // whole Story / Evening-Post section in a styled box), advancing i.
+    function collectUntil(level, stopRe) {
+      var buf = [];
+      while (i < lines.length) {
+        var hm = lines[i].match(/^(#{1,6})\s+/);
+        if (hm && hm[1].length <= level) break;
+        if (stopRe && stopRe.test(lines[i].trim())) break;
+        buf.push(lines[i]); i++;
+      }
+      return buf;
+    }
     while (i < lines.length) {
       var line = lines[i];
       if (/^\s*$/.test(line)) { i++; continue; }
       if (/^\s*([-*_])\1{2,}\s*$/.test(line)) { out.push("<hr/>"); i++; continue; }
       var h = line.match(/^(#{1,6})\s+(.*)$/);
-      if (h) { var lv = h[1].length; out.push("<h" + lv + ">" + inline(h[2]) + "</h" + lv + ">"); i++; continue; }
+      if (h) {
+        var lv = h[1].length, txt = h[2].trim();
+        // Coloured part banner
+        var part = partKind(txt);
+        if (lv <= 3 && part) {
+          out.push('<div class="part part-' + part.n + '"><span class="ico">' + part.ico + "</span> " + inline(txt) + "</div>");
+          i++; continue;
+        }
+        // Step card:  ### 3 min — Title   (optional description line follows)
+        var sm = txt.match(/^(\d+)\s*min\b\s*[—\-–·:]\s*(.+)$/i);
+        if (lv >= 3 && sm) {
+          i++;
+          var desc = [];
+          while (i < lines.length && !/^\s*$/.test(lines[i]) && !/^#{1,6}\s/.test(lines[i]) && !/^\s*[-*+]\s+/.test(lines[i])) { desc.push(lines[i]); i++; }
+          out.push('<div class="step"><div class="t">' + esc(sm[1]) + ' min</div><div><span class="b">' + inline(sm[2]) + "</span>" +
+            (desc.length ? '<span class="d">' + inline(desc.join(" ")) + "</span>" : "") + "</div></div>");
+          continue;
+        }
+        // Story box (warm serif)
+        if (lv >= 2 && /^(the\s+)?story\b/i.test(txt)) {
+          i++;
+          out.push('<div class="story"><div class="label">📖 ' + inline(txt) + "</div>" + mdToHtml(collectUntil(lv, /^(did you know|✨)/i).join("\n")) + "</div>");
+          continue;
+        }
+        // Evening Post box
+        if (lv >= 2 && /^evening\s+post/i.test(txt)) {
+          i++;
+          out.push("<h3>" + inline(txt) + '</h3><div class="post">' + mdToHtml(collectUntil(lv).join("\n")) + "</div>");
+          continue;
+        }
+        out.push("<h" + lv + ">" + inline(txt) + "</h" + lv + ">"); i++; continue;
+      }
       if (line.indexOf("|") !== -1 && i + 1 < lines.length && isTableSep(lines[i + 1])) {
         var head = cells(line), rows = []; i += 2;
         while (i < lines.length && lines[i].indexOf("|") !== -1 && !/^\s*$/.test(lines[i])) { rows.push(cells(lines[i])); i++; }
@@ -242,7 +292,15 @@
         !(lines[i].indexOf("|") !== -1 && i + 1 < lines.length && isTableSep(lines[i + 1]))) {
         para.push(lines[i]); i++;
       }
-      out.push("<p>" + inline(para.join(" ")) + "</p>");
+      var ptext = para.join(" ");
+      if (/^chapter progress so far\s*:/i.test(ptext)) {
+        out.push('<div class="progress">' + inline(ptext) + "</div>");
+      } else if (/^(did you know|✨)/i.test(ptext)) {
+        out.push('<div class="dyk"><span class="label">✨ Did You Know?</span> ' +
+          inline(ptext.replace(/^(did you know\??\s*:?\s*|✨\s*)/i, "")) + "</div>");
+      } else {
+        out.push("<p>" + inline(ptext) + "</p>");
+      }
     }
     return out.join("\n");
   }
