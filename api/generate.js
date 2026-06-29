@@ -178,3 +178,8 @@ module.exports = async function (req, res) {
 };
 
 module.exports.config = { maxDuration: 60 };
+
+// Exported for local testing (no effect on the serverless handler).
+module.exports.addendum = addendum;
+module.exports.userMessage = userMessage;
+module.exports.FRAMEWORK = FRAMEWORK;
