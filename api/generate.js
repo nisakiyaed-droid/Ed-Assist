@@ -104,6 +104,14 @@ function userMessage(d) {
     "Total Sessions: " + d.sessions,
     "Generate: Session " + d.sessionNo + " of " + d.sessions + ". The chapter pages are attached."
   ];
+  if (d.chapterNumber || d.chapterName) {
+    lines.push(
+      "The teacher has confirmed the chapter as " +
+      (d.chapterNumber ? "Chapter " + d.chapterNumber : "this chapter") +
+      (d.chapterName ? ": " + d.chapterName : "") +
+      ". Use exactly that in the title — do not re-detect or change it."
+    );
+  }
   if (d.prior && String(d.prior).trim()) {
     lines.push(
       "",
@@ -267,6 +275,14 @@ module.exports = async function (req, res) {
     d = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
   } catch (e) { d = {}; }
 
+  // Shared school password (PRD §5.1). Only enforced once the school sets a
+  // SCHOOL_PASSWORD env var, so the app keeps working until it's configured.
+  // This also gates the billable endpoint — only staff who know it can generate.
+  if (process.env.SCHOOL_PASSWORD && String(d.password || "") !== process.env.SCHOOL_PASSWORD) {
+    res.status(401).json({ error: "Wrong school password. Please enter it again." });
+    return;
+  }
+
   var files = Array.isArray(d.files) ? d.files : [];
   if (!files.length) {
     res.status(400).json({ error: "Please upload the chapter PDF so I can read the chapter." });
@@ -277,6 +293,8 @@ module.exports = async function (req, res) {
   d.sessions = d.sessions || "4";
   d.sessionNo = d.sessionNo || "1";
   d.prior = d.prior || "";
+  d.chapterNumber = (d.chapterNumber || "").toString().trim();
+  d.chapterName = (d.chapterName || "").toString().trim();
 
   // ONE Gemini call. We deliberately do NOT auto-retry: a second ~30s call would
   // risk exceeding Vercel's 60s function limit (which the teacher sees as "not

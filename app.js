@@ -8,6 +8,47 @@
   "use strict";
   function el(id) { return document.getElementById(id); }
   var MAX_BYTES = 3 * 1024 * 1024; // keep the upload under the server limit
+  var PW_KEY = "ddis.pw";
+
+  // ---- Shared school password (PRD §5.1) --------------------------------
+  // The server only enforces a password once SCHOOL_PASSWORD is set in Vercel.
+  // The login POST tells us which case we're in: a wrong password gets 401, a
+  // probe with no password gets 401 only when one IS configured (otherwise it
+  // falls through to the 400 "upload a chapter" check). So the gate appears by
+  // itself the moment the school sets a password, and stays hidden until then.
+  function getPw() { try { return localStorage.getItem(PW_KEY) || ""; } catch (e) { return ""; } }
+  function setPw(v) { try { v ? localStorage.setItem(PW_KEY, v) : localStorage.removeItem(PW_KEY); } catch (e) {} }
+  function showGate(on) {
+    el("loginGate").classList.toggle("hidden", !on);
+    document.body.classList.toggle("gated", !!on);
+    if (on) { try { el("schoolPw").focus(); } catch (e) {} }
+  }
+  // Returns a promise that resolves true if the password is accepted (or none is
+  // required), false if it's wrong. A network/server error counts as "accepted"
+  // so a blip never locks staff out of the app.
+  function checkPassword(pw) {
+    return fetch("api/generate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pw, files: [] })
+    }).then(function (res) { return res.status !== 401; }, function () { return true; });
+  }
+  function initLoginGate() {
+    if (getPw()) return;                 // already signed in on this device
+    checkPassword("").then(function (ok) {
+      if (!ok) showGate(true);           // a password is configured — ask for it
+    });
+  }
+  function handleLogin(e) {
+    e.preventDefault();
+    var pw = el("schoolPw").value.trim();
+    el("loginErr").classList.add("hidden");
+    var btn = el("loginBtn"); btn.disabled = true; var lbl = btn.textContent; btn.textContent = "Checking…";
+    checkPassword(pw).then(function (ok) {
+      btn.disabled = false; btn.textContent = lbl;
+      if (ok) { setPw(pw); showGate(false); }
+      else { el("loginErr").classList.remove("hidden"); el("schoolPw").focus(); }
+    });
+  }
 
   // ---- Files → inline parts --------------------------------------------
   function fileToInline(file) {
@@ -81,7 +122,9 @@
           if (res.status === 404 || res.status === 405 || !json) {
             throw new Error("The plan maker is not connected here yet. Please open the school's Lesson Planner link.");
           }
-          throw new Error((json && json.error) || ("Request failed (" + res.status + ")."));
+          var err = new Error((json && json.error) || ("Request failed (" + res.status + ")."));
+          err.status = res.status;
+          throw err;
         }
         return json;
       });
@@ -124,7 +167,11 @@
 
     saveLastChoice();                         // remember grade / subject / sessions
     var N = parseInt(el("sessions").value, 10) || 1;
-    var base = { grade: el("grade").value, subject: el("subject").value, sessions: N };
+    var base = {
+      grade: el("grade").value, subject: el("subject").value, sessions: N,
+      chapterNumber: el("chapterNumber").value.trim(),
+      chapterName: el("chapterName").value.trim()
+    };
 
     var jobs = [];
     for (var j = 0; j < files.length; j++) jobs.push(fileToInline(files[j]));
@@ -169,7 +216,8 @@
       setProgress(k - 1, N, "Writing session " + k + " of " + N + "… (about half a minute each — please keep this page open)");
       return postGenerateRetry({
         grade: base.grade, subject: base.subject, sessions: N, sessionNo: k,
-        files: fileParts, prior: currentSessions.join("\n\n")
+        chapterNumber: base.chapterNumber, chapterName: base.chapterName,
+        password: getPw(), files: fileParts, prior: currentSessions.join("\n\n")
       }, function (tryNo) {
         setProgress(k - 1, N, "Slow connection — trying session " + k + " again (try " + (tryNo + 1) + " of 3)…");
       }).then(function (json) {
@@ -190,6 +238,7 @@
     }).catch(function (err) {
       showProgress(false);
       var msg = err && err.message ? err.message : "Something went wrong. Please tap “Make again”.";
+      if (err && err.status === 401) { setPw(""); showGate(true); }   // password changed — sign in again
       if (/Failed to fetch|NetworkError/i.test(msg)) msg = "Couldn't reach the plan maker. Please check your internet and tap “Make again”.";
       if (currentSessions.length) {            // show whatever finished, plus the buttons
         renderSessions(anyTruncated || anyLowQuality);
@@ -481,6 +530,8 @@
   // ---- Wiring -----------------------------------------------------------
   document.addEventListener("DOMContentLoaded", function () {
     loadLastChoice();
+    initLoginGate();
+    el("loginForm").addEventListener("submit", handleLogin);
     el("chapter-form").addEventListener("submit", handleSubmit);
     el("pdfBtn").addEventListener("click", downloadPdf);
     el("waBtn").addEventListener("click", sharePdf);

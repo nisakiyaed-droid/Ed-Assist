@@ -533,9 +533,35 @@ input[type="file"]:hover{border-color:var(--brand);}
 .pdf-doc .rendered th, .pdf-doc .rendered td{display:table-cell !important; width:auto !important;}
 .pdf-doc .rendered td::before{content:none !important; display:none !important;}
 
+/* =====================================================================
+   LOGIN GATE — shared school password (PRD §5.1)
+   ===================================================================== */
+.login-gate{
+  position:fixed; inset:0; z-index:1000;
+  display:flex; align-items:center; justify-content:center; padding:24px;
+  background:linear-gradient(160deg, var(--brand-tint), #eef2f8);
+}
+.login-gate.hidden{display:none;}
+/* Stop the page behind from scrolling while the gate is up. */
+body.gated{overflow:hidden;}
+.login-card{
+  width:100%; max-width:360px; margin:0;
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r); padding:30px 26px 26px;
+  box-shadow:0 10px 40px rgba(27,34,48,.12);
+  display:flex; flex-direction:column; gap:14px; text-align:center;
+}
+.login-logo{width:56px; height:56px; object-fit:contain; margin:0 auto 2px;}
+.login-card h2{margin:0; font-size:21px; color:var(--ink);}
+.login-sub{margin:0 0 4px; color:var(--ink-2); font-size:14.5px;}
+.login-card input{text-align:center;}
+.login-card .btn.full{margin-top:2px;}
+.login-err{margin:0; color:#c23a3a; font-size:13px; font-weight:600;}
+.login-err.hidden{display:none;}
+
 /* Print: just the plan, tight */
 @media print{
-  .site-header, .hero, .how, form, .sample, .site-footer,
+  .login-gate, .site-header, .hero, .how, form, .sample, .site-footer,
   .output-toolbar .toolbar-actions, .gen-status, .trunc-note, .ai-note{display:none !important;}
   .panel{box-shadow:none; border:none; padding:0;}
   .result.hidden{display:none;}

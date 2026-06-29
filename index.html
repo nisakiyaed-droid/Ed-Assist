@@ -9,9 +9,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,500;1,500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260629c" />
+  <link rel="stylesheet" href="styles.css?v=20260629d" />
 </head>
 <body>
+  <!-- LOGIN GATE (shared school password) -->
+  <div id="loginGate" class="login-gate hidden">
+    <form id="loginForm" class="login-card" autocomplete="on">
+      <img class="login-logo" src="assets/school-mark.png" alt="" />
+      <h2>Lesson Planner</h2>
+      <p class="login-sub">Enter the school password to continue.</p>
+      <input type="password" id="schoolPw" placeholder="School password" autocomplete="current-password" autocapitalize="off" aria-label="School password" />
+      <button type="submit" class="btn primary full" id="loginBtn">Enter</button>
+      <p id="loginErr" class="login-err hidden" role="alert">That password didn't work. Please try again.</p>
+    </form>
+  </div>
+
   <header class="site-header">
     <a class="brand" href="#top">
       <img class="brand-logo" src="assets/school-mark.png" alt="Dr. Dasarathan International School logo" />
@@ -31,7 +43,7 @@
       <p class="lead">
         Add a chapter, pick your class, and get a full lesson plan as a PDF in
         minutes. Built around a story children will love, and easy to share on
-        WhatsApp. No typing, no login.
+        WhatsApp. No typing — just upload and tap.
       </p>
       <div class="hero-actions">
         <a href="#start" class="btn primary">Make a lesson plan</a>
@@ -61,6 +73,17 @@
             <input type="file" id="chapterFile" accept="application/pdf" multiple required aria-required="true" />
             <span class="field-error" role="alert">Please add the chapter pages first.</span>
           </label>
+
+          <div class="field-row two">
+            <label class="field">
+              <span class="field-label">Chapter number <span class="hint">(optional)</span></span>
+              <input type="text" id="chapterNumber" inputmode="numeric" placeholder="auto-detected" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span class="field-label">Chapter name <span class="hint">(optional)</span></span>
+              <input type="text" id="chapterName" placeholder="auto-detected" autocomplete="off" />
+            </label>
+          </div>
 
           <div class="field-row three">
             <label class="field">
@@ -128,6 +151,6 @@
   </footer>
 
   <script src="assets/vendor/html2pdf.bundle.min.js"></script>
-  <script src="app.js?v=20260629c"></script>
+  <script src="app.js?v=20260629d"></script>
 </body>
 </html>
