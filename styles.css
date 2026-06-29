@@ -521,11 +521,16 @@ input[type="file"]:hover{border-color:var(--brand);}
 /* Keep whole lines/rows together so they aren't sliced at a page seam. */
 .pdf-doc .rendered p, .pdf-doc .rendered li, .pdf-doc .rendered tr{
   break-inside:avoid; page-break-inside:avoid;}
-/* The mobile stacked-table CSS must NEVER apply inside the PDF — it was collapsing
-   the misconceptions table to a single repeated "What the child says" column. */
-.pdf-doc .rendered thead{display:table-header-group !important;}
-.pdf-doc .rendered tr{display:table-row !important;}
-.pdf-doc .rendered th, .pdf-doc .rendered td{display:table-cell !important;}
+/* The mobile (<=600px) stacked-table CSS must NEVER apply inside the PDF. On a
+   phone it both collapsed the table to one column AND made the real element much
+   taller than the captured image — and html2pdf counts pages from the real
+   height, producing dozens of near-blank pages. Force a full table layout at
+   every viewport so the PDF is identical on phone and desktop. */
+.pdf-doc .rendered table{display:table !important; table-layout:fixed; width:100% !important; border:1px solid var(--hairline) !important;}
+.pdf-doc .rendered thead{display:table-header-group !important; position:static !important; clip:auto !important; height:auto !important; width:auto !important; overflow:visible !important;}
+.pdf-doc .rendered tbody{display:table-row-group !important;}
+.pdf-doc .rendered tr{display:table-row !important; margin:0 !important; border:none !important; background:transparent !important;}
+.pdf-doc .rendered th, .pdf-doc .rendered td{display:table-cell !important; width:auto !important;}
 .pdf-doc .rendered td::before{content:none !important; display:none !important;}
 
 /* Print: just the plan, tight */

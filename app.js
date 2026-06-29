@@ -435,7 +435,12 @@
       margin: [10, 10, 12, 10],
       filename: pdfFilename(),
       image: { type: "jpeg", quality: 0.96 },
-      html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, scrollX: 0, scrollY: 0 },
+      // windowWidth pins the capture to the document's own width (760) on every
+      // device, so a phone's narrow screen can't trigger the mobile layout or clip
+      // the right edge. Must equal the .pdf-doc width exactly — 800 left slack that
+      // re-introduced the right-edge clip; a narrow real viewport produced blank,
+      // stacked, many-page output.
+      html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, scrollX: 0, scrollY: 0, windowWidth: 760 },
       jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       pagebreak: { mode: ["css", "legacy"] }
     };
