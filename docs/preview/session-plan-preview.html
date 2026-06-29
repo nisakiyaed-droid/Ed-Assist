@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Session Plan — colored preview</title>
+<style>
+  /* ---- Palette (matches the House Style guide) ---- */
+  :root{
+    --ink:#1F2430; --soft:#5A6480; --line:#D8DEE9; --softbg:#F7F9FC;
+    --green:#2E7D32; --blue:#1565C0; --purple:#6A1B9A; --orange:#E65100; --teal:#00796B;
+    --p1bg:#E8F0FE; --p2bg:#E7F5E9; --p3bg:#F3E9F8;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:#e9edf4; color:var(--ink);
+    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
+    line-height:1.5; font-size:15px;
+  }
+  /* A4-ish sheet */
+  .sheet{
+    background:#fff; max-width:820px; margin:24px auto; padding:40px 46px;
+    box-shadow:0 8px 30px rgba(0,0,0,.12); border-radius:6px;
+  }
+  .doc-title{font-size:24px; font-weight:800; margin:0 0 2px; letter-spacing:-.01em;}
+  .doc-sub{color:var(--soft); font-size:13px; margin:0 0 18px;}
+  .progress{
+    background:var(--softbg); border:1px solid var(--line); border-left:4px solid var(--blue);
+    border-radius:8px; padding:10px 14px; font-size:13.5px; color:var(--soft); margin:0 0 22px;
+  }
+
+  /* Part banners */
+  .part{border-radius:9px; padding:9px 14px; font-weight:700; font-size:15px; margin:26px 0 14px;
+        display:flex; align-items:center; gap:9px;}
+  .part-1{background:var(--p1bg); color:var(--blue);}
+  .part-2{background:var(--p2bg); color:var(--green);}
+  .part-3{background:var(--p3bg); color:var(--purple);}
+  .part .ico{font-size:16px;}
+
+  h3{font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--soft); margin:18px 0 7px;}
+  ul,ol{margin:6px 0 6px; padding-left:22px;} li{margin:4px 0;}
+  p{margin:7px 0;}
+
+  /* Cue chips */
+  .cue{display:inline-block; font-size:12px; font-weight:700; padding:2px 9px; border-radius:999px; color:#fff;}
+  .c-green{background:var(--green);} .c-blue{background:var(--blue);}
+  .c-purple{background:var(--purple);} .c-orange{background:var(--orange);} .c-teal{background:var(--teal);}
+
+  /* Timeline */
+  .step{display:grid; grid-template-columns:64px 1fr; gap:12px; align-items:start;
+        padding:9px 12px; border:1px solid var(--line); border-radius:8px; margin:7px 0; background:#fff;}
+  .step .t{font-weight:700; font-size:12.5px; color:var(--green); background:var(--p2bg);
+           border-radius:7px; padding:3px 6px; text-align:center;}
+  .step b{display:block;} .step small{color:var(--soft);}
+
+  /* Story block (purple) */
+  .story{border:1px solid #e3d3ef; border-left:4px solid var(--purple); background:#faf6fd;
+         border-radius:9px; padding:14px 16px; margin:10px 0;}
+  .story .label{color:var(--purple); font-weight:700; font-size:13px; margin-bottom:6px;}
+  .story p{font-size:15.5px;}
+
+  /* Did You Know (orange) */
+  .dyk{border:1px solid #f3d9c2; border-left:4px solid var(--orange); background:#fff6ef;
+       border-radius:9px; padding:11px 14px; margin:10px 0; font-size:14px;}
+  .dyk .label{color:var(--orange); font-weight:700; font-size:13px;}
+
+  /* Cross-curricular (teal) */
+  .xc{border:1px solid #c7e6e1; border-left:4px solid var(--teal); background:#f0faf8;
+      border-radius:9px; padding:11px 14px; margin:10px 0; font-size:14px;}
+  .xc .label{color:var(--teal); font-weight:700; font-size:13px;}
+
+  /* Evening post */
+  .post{border:1px solid var(--line); border-radius:9px; padding:14px 16px; background:var(--softbg); margin:8px 0;}
+
+  table{border-collapse:collapse; width:100%; font-size:13.5px; margin:8px 0;}
+  th,td{border:1px solid var(--line); padding:7px 9px; text-align:left;} th{background:var(--softbg);}
+
+  .foot{margin-top:26px; padding-top:12px; border-top:1px solid var(--line);
+        color:var(--soft); font-size:12px; display:flex; justify-content:space-between;}
+
+  .note{max-width:820px; margin:18px auto 0; color:#5A6480; font-size:13px; text-align:center;}
+  @media print{
+    body{background:#fff;} .sheet{box-shadow:none; margin:0; max-width:none; border-radius:0;}
+    .note{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+  <p class="doc-title">Session 1 — Parts of a Plant</p>
+  <p class="doc-sub">Plants Around Us · Grade 3 · Environmental Studies · 40-minute session</p>
+
+  <div class="progress"><b>Chapter Progress So Far:</b> This is the first session of the chapter. Today the children meet Meena and learn the five parts of a plant.</div>
+
+  <!-- PART ONE -->
+  <div class="part part-1"><span class="ico">📋</span> Part One — Before Class</div>
+
+  <h3>Learning Outcomes</h3>
+  <ol>
+    <li>Name the five parts of a plant — root, stem, leaf, flower, fruit.</li>
+    <li>Say what each part does, in one simple sentence.</li>
+    <li>Point out these parts on a real plant or a clear picture.</li>
+    <li>Explain why a plant needs its roots and leaves to stay alive.</li>
+    <li>Handle a real plant gently, as a living thing.</li>
+  </ol>
+
+  <h3>Cue colors used in this plan</h3>
+  <p>
+    <span class="cue c-green">Concept</span>
+    <span class="cue c-blue">New word</span>
+    <span class="cue c-purple">Story</span>
+    <span class="cue c-orange">Amazing fact</span>
+    <span class="cue c-teal">Cross-curricular</span>
+  </p>
+
+  <h3>Anticipated Misconceptions (three)</h3>
+  <table>
+    <tr><th>Child says</th><th>Why</th><th>Teacher does</th></tr>
+    <tr><td>"The roots are dirty, they do nothing."</td><td>Roots are hidden.</td><td>Show roots drinking in a clear glass of water.</td></tr>
+    <tr><td>"Only the flower matters."</td><td>Flowers are bright.</td><td>Cover the flower, then the leaves — ask if the plant can still live.</td></tr>
+    <tr><td>"The stem is just a stick."</td><td>It looks plain.</td><td>Trace the water's path up the stem with a finger.</td></tr>
+  </table>
+
+  <!-- PART TWO -->
+  <div class="part part-2"><span class="ico">🍎</span> Part Two — During Class · Enhanced (~35 min)</div>
+
+  <div class="step"><div class="t">3 min</div><div><b>Prior Knowledge Activation</b><small>Hold up the plant. "Is it living? How do you know?"</small></div></div>
+  <div class="step"><div class="t">3 min</div><div><b>Hook</b><small>"This plant is drinking water right now — and you can see it."</small></div></div>
+  <div class="step"><div class="t">8 min</div><div><b>Teach the Concept</b><small>Name each part and its job: root, stem, leaf, flower, fruit.</small></div></div>
+  <div class="step"><div class="t">6 min</div><div><b>Class Activity</b><small>Pairs point to and name a part on the real plant.</small></div></div>
+  <div class="step"><div class="t">5 min</div><div><b>Assessment for Learning</b><small>Written, oral, and physical (order the picture cards).</small></div></div>
+  <div class="step"><div class="t">7 min</div><div><b>The Story</b><small>Read "Meena and Paati's Garden" (below).</small></div></div>
+  <div class="step"><div class="t">3 min</div><div><b>Takeaway</b><small>Children finish: "Today I learned that a plant has…"</small></div></div>
+
+  <div class="story">
+    <div class="label">📖 The Story · Meena and Paati's Garden</div>
+    <p>In a village near Madurai, where the morning smells of jasmine and filter coffee, lived a girl named Meena. Every evening she helped her grandmother — her Paati — in the little garden behind their house…</p>
+    <p><i>So a plant has many parts, and each one has its own job,</i> Meena whispered. That night she wondered: how many kinds of plants were waiting in the village for her to meet tomorrow?</p>
+  </div>
+
+  <div class="xc"><span class="label">🔗 Cross-curricular (Full only):</span> Children draw and color their own plant, labeling the five parts. <i>Genuine: EVS naming + Art skill together.</i></div>
+
+  <div class="dyk"><span class="label">✨ Did You Know?</span> The world's largest flower can be as wide as a car tyre — and it smells like old socks!</div>
+
+  <!-- PART THREE -->
+  <div class="part part-3"><span class="ico">🌙</span> Part Three — After Class</div>
+
+  <h3>Evening Post (paste into Google Classroom)</h3>
+  <div class="post">
+    <p>🌱 <b>Today in EVS: Parts of a Plant</b></p>
+    <p><b>Quick glance</b><br>
+      • Today's Learning Chart: A plant has 5 parts — root, stem, leaf, flower, fruit.<br>
+      • Home task: Find one plant at home and point out its parts.<br>
+      • Curiosity question: Can a plant live without its roots?</p>
+    <p><b>Read more</b> ⬇️<br>
+      Tonight's story: <i>Meena and Paati's Garden.</i><br>
+      New words: root, stem, leaf, flower, fruit.<br>
+      Amazing fact: The world's largest flower can be as wide as a car tyre!</p>
+  </div>
+
+  <div class="foot"><span>Plants Around Us · Session 1 of 4</span><span>Framework v1.1 · June 2026</span></div>
+</div>
+
+<p class="note">This is a preview of how the downloadable plan will look. To save as PDF: open in a browser, press <b>Ctrl/Cmd + P</b>, and choose "Save as PDF".</p>
+
+</body>
+</html>
