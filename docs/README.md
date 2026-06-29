@@ -10,10 +10,17 @@ documents (as both readable text and the original PDFs) that define how it works
 | 1 | [Orientation for Teachers](framework/1-orientation-for-teachers.md) | Teachers | A first-read overview of what the system is and what you get |
 | 2 | [How to Use the System](framework/2-how-to-use-the-system.md) | Teachers | Step-by-step instructions for generating plans |
 | 3 | [The Architecture](framework/3-the-architecture.md) | Leaders / partners | The design and reasoning behind the system |
-| 4 | [The Lesson Plan Framework](framework/4-lesson-plan-framework.md) | Claude (the engine) | The instruction document Claude reads to generate plans |
+| 4 | [The Lesson Plan Framework **(v1.1 — current)**](framework/4-lesson-plan-framework-v1.1.md) | Claude (the engine) | The instruction document Claude reads to generate plans |
 
 > **Document 4 is the engine.** Refining it improves every plan the system
 > produces — at no cost. This is where most improvement work happens.
+>
+> **Use [v1.1](framework/4-lesson-plan-framework-v1.1.md)** — it is the current
+> engine. The original [v1.0](framework/4-lesson-plan-framework.md) is kept for
+> reference. v1.1 adds (all additive, structure unchanged): a time-budget rule so
+> the in-class sequence adds up; a definition of *Today's Learning Chart*; the six
+> *Core* essentials listed explicitly; a soft word-cap on non-finale stories; and
+> subject-by-subject story guidance (English / Maths / EVS / Social Studies).
 
 ## Original PDFs
 
