@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ed-Assist · Lesson Plan Creator</title>
+  <meta name="description" content="Create structured, ready-to-teach lesson plans in seconds. Built for teachers and tutors." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">
+      <span class="brand-mark">◆</span>
+      <span class="brand-name">Ed-Assist</span>
+    </div>
+    <span class="brand-tag">Lesson Plan Creator</span>
+  </header>
+
+  <main class="layout">
+    <!-- INPUT PANEL -->
+    <section class="panel form-panel" aria-label="Lesson details">
+      <h1>Create a lesson plan</h1>
+      <p class="subtle">Fill in a few details and get a structured, ready-to-teach plan in seconds.</p>
+
+      <form id="lesson-form" autocomplete="off">
+        <label class="field">
+          <span class="field-label">Topic <span class="req">*</span></span>
+          <input type="text" id="topic" name="topic" placeholder="e.g. Photosynthesis" required />
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Subject</span>
+            <input type="text" id="subject" name="subject" placeholder="e.g. Biology" />
+          </label>
+          <label class="field">
+            <span class="field-label">Grade / Level</span>
+            <input type="text" id="grade" name="grade" placeholder="e.g. Grade 7" />
+          </label>
+        </div>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field-label">Lesson length</span>
+            <select id="duration" name="duration">
+              <option value="30">30 minutes</option>
+              <option value="45" selected>45 minutes</option>
+              <option value="60">60 minutes</option>
+              <option value="90">90 minutes</option>
+            </select>
+          </label>
+          <label class="field">
+            <span class="field-label">Teaching style</span>
+            <select id="style" name="style">
+              <option value="balanced" selected>Balanced</option>
+              <option value="hands-on">Hands-on / activity-led</option>
+              <option value="discussion">Discussion-led</option>
+              <option value="direct">Direct instruction</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Learning goals <span class="hint">(optional — what should students be able to do?)</span></span>
+          <textarea id="goals" name="goals" rows="2" placeholder="e.g. Explain how plants make food and why it matters"></textarea>
+        </label>
+
+        <div class="actions">
+          <button type="submit" class="btn primary" id="generate-btn">Generate lesson plan</button>
+          <button type="button" class="btn ghost" id="example-btn">Try an example</button>
+        </div>
+      </form>
+
+      <p class="mode-note" id="mode-note">
+        <strong>Free mode.</strong> Plans are built from a smart template — no account, no cost.
+        AI-powered plans (Claude) can be added later for even better results.
+      </p>
+    </section>
+
+    <!-- OUTPUT PANEL -->
+    <section class="panel output-panel" aria-label="Generated lesson plan">
+      <div class="output-toolbar">
+        <h2 id="output-title">Your lesson plan</h2>
+        <div class="toolbar-actions">
+          <button type="button" class="btn small ghost" id="copy-btn" disabled>Copy</button>
+          <button type="button" class="btn small ghost" id="print-btn" disabled>Print / PDF</button>
+        </div>
+      </div>
+
+      <div id="output" class="output-body">
+        <div class="empty-state" id="empty-state">
+          <div class="empty-icon">✎</div>
+          <p>Your generated lesson plan will appear here.</p>
+          <p class="subtle">Enter a topic on the left and press <strong>Generate</strong>.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>Ed-Assist · a tool for teachers &amp; tutors</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
