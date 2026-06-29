@@ -96,6 +96,82 @@ function addendum(d) {
   ].join("\n");
 }
 
+// Chapter Summary overlay (PRD §3.1): one revision sheet for the whole chapter —
+// a teacher reference half and a child-friendly revision half. Generated as a
+// final step after all sessions, so it can reuse their vocabulary, story
+// character and misconceptions rather than inventing new ones.
+function summaryAddendum(d) {
+  var grade = gradeGuidance(d.grade);
+  return [
+    "",
+    "=== TASK ===",
+    "Write ONE Chapter Summary for the whole chapter, in a single reply. This is the",
+    "final revision sheet after all " + d.sessions + " sessions — not a re-teach.",
+    "Do not ask questions or wait for approval.",
+    "",
+    "=== GROUND IT IN THE CHAPTER (do not invent) ===",
+    "Summarise only what the ATTACHED chapter and the earlier sessions below contain.",
+    "Reuse the SAME chapter number/name, the SAME vocabulary, the SAME recurring story",
+    "character, and the SAME misconceptions already established — add nothing new.",
+    "",
+    "=== GRADE & DEPTH (this is " + d.grade + ") ===",
+    "Pitch the children's half at " + d.grade + ": " + grade.verbs + ".",
+    "",
+    "=== OUTPUT FORMAT (exact markers — the app colour-codes them) ===",
+    "Line 1:  # Chapter <number>: <name> — Chapter Summary",
+    "Then TWO halves, each a '## ' heading.",
+    "'## For the Teacher' with these '### ' sub-sections, in order:",
+    "  '### The Big Idea' — 2-3 sentences on what the whole chapter teaches.",
+    "  '### Key Points' — a tight bullet list of the main ideas across all sessions.",
+    "  '### Words to Know' — a 2-column table 'Word | What it means'.",
+    "  '### Watch for These' — the chapter's 3 common misconceptions as short bullets.",
+    "  '### The Story So Far' — one short paragraph recapping the character's journey.",
+    "'## For the Children' (simple words a child of this grade can read), in order:",
+    "  '### What We Learned' — 4-6 'I can ...' bullets in very simple language.",
+    "  '### My New Words' — each key word with a one-line, kid-friendly meaning.",
+    "  '### Quick Check' — 3-4 easy questions a child can answer from memory.",
+    "  '### Remember This' — one or two warm, encouraging takeaway lines.",
+    "",
+    "=== QUALITY BAR ===",
+    "- Keep it to about one page — concise revision, not a fresh lesson.",
+    "- Warm, simple, encouraging tone; the children's half must be readable by a child",
+    "  of this grade and usable by a parent at home.",
+    "- Keep the Tamil Nadu / Coimbatore flavour consistent with the sessions.",
+    "",
+    "=== NON-NEGOTIABLE ===",
+    "Output clean Markdown only — no preamble, no sign-off, no filler."
+  ].join("\n");
+}
+
+function summaryUserMessage(d) {
+  var lines = [
+    "School: Dr. Dasarathan International School, Coimbatore, Tamil Nadu (ICSE).",
+    "Grade: " + d.grade,
+    "Subject: " + d.subject,
+    "Total Sessions: " + d.sessions,
+    "Generate: the Chapter Summary for the whole chapter. The chapter pages are attached."
+  ];
+  if (d.chapterNumber || d.chapterName) {
+    lines.push(
+      "The teacher has confirmed the chapter as " +
+      (d.chapterNumber ? "Chapter " + d.chapterNumber : "this chapter") +
+      (d.chapterName ? ": " + d.chapterName : "") +
+      ". Use exactly that in the title — do not re-detect or change it."
+    );
+  }
+  if (d.prior && String(d.prior).trim()) {
+    lines.push(
+      "",
+      "=== ALL SESSIONS OF THIS CHAPTER (already written) ===",
+      "Base the summary on these: reuse their chapter number/name, vocabulary, story",
+      "character and misconceptions. Do not introduce anything new.",
+      String(d.prior).slice(0, 24000),
+      "=== END SESSIONS ==="
+    );
+  }
+  return lines.join("\n");
+}
+
 function userMessage(d) {
   var lines = [
     "School: Dr. Dasarathan International School, Coimbatore, Tamil Nadu (ICSE).",
@@ -134,7 +210,9 @@ function userMessage(d) {
 async function callGemini(key, model, d, extraInstruction) {
   // Same file-part building as before: the user message first, then each file
   // inlined as base64. A retry adds a short steering note after the user message.
-  var parts = [{ text: userMessage(d) }];
+  // d.mode === "summary" swaps in the Chapter Summary prompt instead of a session.
+  var isSummary = d.mode === "summary";
+  var parts = [{ text: isSummary ? summaryUserMessage(d) : userMessage(d) }];
   if (extraInstruction) {
     parts.push({ text: extraInstruction });
   }
@@ -146,7 +224,7 @@ async function callGemini(key, model, d, extraInstruction) {
   }
 
   var body = {
-    systemInstruction: { parts: [{ text: FRAMEWORK + "\n\n" + addendum(d) }] },
+    systemInstruction: { parts: [{ text: FRAMEWORK + "\n\n" + (isSummary ? summaryAddendum(d) : addendum(d)) }] },
     contents: [{ role: "user", parts: parts }],
     // gemini-2.5-flash is a thinking model. Left uncapped it can think for 100s+
     // (a single call hit 142s in testing) and blow past Vercel's 60s limit — the
@@ -255,6 +333,21 @@ function planPasses(result, d) {
   return validatePlan(result.text, d).ok;
 }
 
+// Lighter gate for the Chapter Summary: a title, both halves, and real content.
+function validateSummary(text) {
+  var t = text || "", missing = [];
+  if (!/^#\s+/m.test(t)) { missing.push("title"); }
+  if (!/##\s+For the Teacher/i.test(t)) { missing.push("teacher section"); }
+  if (!/##\s+For the Children/i.test(t)) { missing.push("children section"); }
+  if (t.replace(/\s/g, "").length < 400) { missing.push("content"); }
+  return { ok: missing.length === 0, missing: missing };
+}
+function summaryPasses(result) {
+  if (!result || !result.text || !result.text.trim()) { return false; }
+  if (result.finishReason && result.finishReason !== "STOP") { return false; }
+  return validateSummary(result.text).ok;
+}
+
 module.exports = async function (req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Use POST." });
@@ -295,6 +388,8 @@ module.exports = async function (req, res) {
   d.prior = d.prior || "";
   d.chapterNumber = (d.chapterNumber || "").toString().trim();
   d.chapterName = (d.chapterName || "").toString().trim();
+  d.mode = d.mode === "summary" ? "summary" : "session";
+  var isSummary = d.mode === "summary";
 
   // ONE Gemini call. We deliberately do NOT auto-retry: a second ~30s call would
   // risk exceeding Vercel's 60s function limit (which the teacher sees as "not
@@ -324,7 +419,7 @@ module.exports = async function (req, res) {
   }
 
   // Quality gate: if the draft is complete and well-formed, ship it clean.
-  if (planPasses(first, d)) {
+  if (isSummary ? summaryPasses(first) : planPasses(first, d)) {
     res.status(200).json({ markdown: first.text, truncated: false, finishReason: first.finishReason });
     return;
   }
@@ -351,4 +446,7 @@ module.exports.config = { maxDuration: 60 };
 // Exported for local testing (no effect on the serverless handler).
 module.exports.addendum = addendum;
 module.exports.userMessage = userMessage;
+module.exports.summaryAddendum = summaryAddendum;
+module.exports.summaryUserMessage = summaryUserMessage;
+module.exports.validateSummary = validateSummary;
 module.exports.FRAMEWORK = FRAMEWORK;

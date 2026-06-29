@@ -85,6 +85,7 @@
   // ---- Generate ALL sessions -------------------------------------------
   var planTitleText = "Lesson plan";
   var currentSessions = [];
+  var summaryMarkdown = "";          // the whole-chapter revision sheet (PRD §3.1)
   var lastMarkdown = "";
   // Remembered inputs from the last run, so "Make again" can repeat it exactly
   // without re-reading the file from disk.
@@ -190,6 +191,7 @@
   // Core generation flow — used by both Generate and "Make again".
   function runGeneration(base, fileParts) {
     var N = base.sessions;
+    var STEPS = N + 1;                         // N sessions + one chapter summary
     lastRun = { base: base, fileParts: fileParts }; // cache for "Make again"
 
     var btn = el("generateBtn");
@@ -198,12 +200,12 @@
     btn.textContent = "Making your plan…";
     el("planResult").classList.remove("hidden");
     el("planBody").innerHTML = "";            // the plan itself stays hidden until ALL sessions are done
-    currentSessions = []; lastMarkdown = "";
+    currentSessions = []; summaryMarkdown = ""; lastMarkdown = "";
     var anyTruncated = false;
     var anyLowQuality = false;
     showToolbar(false);                       // buttons stay away until all sessions are done
     showProgress(true);                       // only a progress bar shows during generation
-    setProgress(0, N, "Reading your chapter…");
+    setProgress(0, STEPS, "Reading your chapter…");
     el("genStatus").classList.add("hidden");
     el("planTitle").textContent = "Your lesson plan";
     setMeta([base.grade, base.subject, N + " session" + (N > 1 ? "s" : "")]);
@@ -213,25 +215,42 @@
     function next() {
       if (k >= N) return Promise.resolve();
       k++;
-      setProgress(k - 1, N, "Writing session " + k + " of " + N + "… (about half a minute each — please keep this page open)");
+      setProgress(k - 1, STEPS, "Writing session " + k + " of " + N + "… (about half a minute each — please keep this page open)");
       return postGenerateRetry({
         grade: base.grade, subject: base.subject, sessions: N, sessionNo: k,
         chapterNumber: base.chapterNumber, chapterName: base.chapterName,
         password: getPw(), files: fileParts, prior: currentSessions.join("\n\n")
       }, function (tryNo) {
-        setProgress(k - 1, N, "Slow connection — trying session " + k + " again (try " + (tryNo + 1) + " of 3)…");
+        setProgress(k - 1, STEPS, "Slow connection — trying session " + k + " again (try " + (tryNo + 1) + " of 3)…");
       }).then(function (json) {
         currentSessions.push(json.markdown || "");
         if (json.truncated) anyTruncated = true;
         if (json.lowQuality) anyLowQuality = true;
-        setProgress(currentSessions.length, N,
-          currentSessions.length + " of " + N + " session" + (N > 1 ? "s" : "") + " ready" +
-          (currentSessions.length < N ? "…" : ""));
+        setProgress(currentSessions.length, STEPS,
+          currentSessions.length + " of " + N + " session" + (N > 1 ? "s" : "") + " ready…");
         return next();
       });
     }
 
-    Promise.resolve().then(next).then(function () {
+    // After every session, write the whole-chapter summary. It's a bonus sheet,
+    // so a failure here never throws away the sessions the teacher already has.
+    function makeSummary() {
+      if (!currentSessions.length) return Promise.resolve();
+      setProgress(N, STEPS, "Almost done — writing the chapter summary…");
+      return postGenerateRetry({
+        grade: base.grade, subject: base.subject, sessions: N, mode: "summary",
+        chapterNumber: base.chapterNumber, chapterName: base.chapterName,
+        password: getPw(), files: fileParts, prior: currentSessions.join("\n\n")
+      }, function (tryNo) {
+        setProgress(N, STEPS, "Slow connection — trying the summary again (try " + (tryNo + 1) + " of 3)…");
+      }).then(function (json) {
+        summaryMarkdown = json.markdown || "";
+        if (json.lowQuality) anyLowQuality = true;
+        setProgress(STEPS, STEPS, "Your plan is ready.");
+      }, function () { /* summary is optional — keep the sessions regardless */ });
+    }
+
+    Promise.resolve().then(next).then(makeSummary).then(function () {
       showProgress(false);
       renderSessions(anyTruncated || anyLowQuality); // reveal the whole plan at once
       showToolbar(true);                       // only now are Download / Share / Print available
@@ -259,10 +278,13 @@
   }
 
   function renderSessions(truncated) {
-    lastMarkdown = currentSessions.join("\n\n");
+    lastMarkdown = currentSessions.concat(summaryMarkdown ? [summaryMarkdown] : []).join("\n\n");
     var html = currentSessions.map(function (md) {
       return '<section class="plan-session">' + mdToHtml(md) + "</section>";
     }).join("");
+    if (summaryMarkdown) {
+      html += '<section class="plan-session plan-summary">' + mdToHtml(summaryMarkdown) + "</section>";
+    }
     if (truncated) {
       html = '<div class="trunc-note">⚠️ This plan may be incomplete. Please tap “Make again” for a fresh one.</div>' + html;
     }
@@ -436,6 +458,9 @@
     var body = currentSessions.map(function (md) {
       return '<section class="plan-session"><div class="rendered">' + mdToHtml(md) + '</div></section>';
     }).join("");
+    if (summaryMarkdown) {
+      body += '<section class="plan-session plan-summary"><div class="rendered">' + mdToHtml(summaryMarkdown) + '</div></section>';
+    }
     wrap.innerHTML = head + body;
     return wrap;
   }

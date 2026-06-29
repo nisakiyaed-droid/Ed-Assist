@@ -533,6 +533,11 @@ input[type="file"]:hover{border-color:var(--brand);}
 .pdf-doc .rendered th, .pdf-doc .rendered td{display:table-cell !important; width:auto !important;}
 .pdf-doc .rendered td::before{content:none !important; display:none !important;}
 
+/* Chapter Summary — the whole-chapter revision sheet starts on its own page in
+   the PDF and gets a soft divider on screen. */
+.plan-summary{border-top:2px dashed var(--line); margin-top:8px; padding-top:8px;}
+.pdf-doc .plan-summary{page-break-before:always; break-before:page; border-top:none; margin-top:0; padding-top:0;}
+
 /* =====================================================================
    LOGIN GATE — shared school password (PRD §5.1)
    ===================================================================== */
