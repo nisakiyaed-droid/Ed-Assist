@@ -129,7 +129,7 @@
     var body = {
       systemInstruction: { parts: [{ text: systemText }] },
       contents: [{ role: "user", parts: parts }],
-      generationConfig: { temperature: 0.85, maxOutputTokens: 8192 }
+      generationConfig: { temperature: 0.85, maxOutputTokens: 16000 }
     };
     return fetch(url, {
       method: "POST",
@@ -230,8 +230,85 @@
   var lastMarkdown = "";
   function renderPlan(markdown) {
     lastMarkdown = markdown;
-    var html = window.DOMPurify.sanitize(window.marked.parse(markdown));
-    el("planBody").innerHTML = html;
+    el("planBody").innerHTML = mdToHtml(markdown);
+  }
+
+  // ---- Tiny, safe Markdown renderer (no external dependency) ------------
+  // Escapes all raw HTML, then emits only a fixed set of tags from Markdown
+  // syntax — so there is no injection path even though the text comes from AI.
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function inline(text) {
+    var t = esc(text);
+    t = t.replace(/`([^`]+)`/g, "<code>$1</code>");
+    t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    t = t.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+    t = t.replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,!?]|$)/g, "$1<em>$2</em>");
+    return t;
+  }
+  function isTableSep(line) { return /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/.test(line) && line.indexOf("-") !== -1; }
+  function cells(line) {
+    var s = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+    return s.split("|").map(function (c) { return c.trim(); });
+  }
+  function mdToHtml(md) {
+    var lines = String(md).replace(/\r\n/g, "\n").split("\n");
+    var out = [], i = 0;
+    function flushList(tag, items) {
+      out.push("<" + tag + ">" + items.map(function (x) { return "<li>" + inline(x) + "</li>"; }).join("") + "</" + tag + ">");
+    }
+    while (i < lines.length) {
+      var line = lines[i];
+      if (/^\s*$/.test(line)) { i++; continue; }
+      // Horizontal rule
+      if (/^\s*([-*_])\1{2,}\s*$/.test(line)) { out.push("<hr/>"); i++; continue; }
+      // Heading
+      var h = line.match(/^(#{1,6})\s+(.*)$/);
+      if (h) { var lv = h[1].length; out.push("<h" + lv + ">" + inline(h[2]) + "</h" + lv + ">"); i++; continue; }
+      // Table
+      if (line.indexOf("|") !== -1 && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+        var head = cells(line), rows = [];
+        i += 2;
+        while (i < lines.length && lines[i].indexOf("|") !== -1 && !/^\s*$/.test(lines[i])) { rows.push(cells(lines[i])); i++; }
+        var th = "<thead><tr>" + head.map(function (c) { return "<th>" + inline(c) + "</th>"; }).join("") + "</tr></thead>";
+        var tb = "<tbody>" + rows.map(function (r) {
+          return "<tr>" + r.map(function (c) { return "<td>" + inline(c) + "</td>"; }).join("") + "</tr>";
+        }).join("") + "</tbody>";
+        out.push("<table>" + th + tb + "</table>");
+        continue;
+      }
+      // Blockquote
+      if (/^\s*>\s?/.test(line)) {
+        var q = [];
+        while (i < lines.length && /^\s*>\s?/.test(lines[i])) { q.push(lines[i].replace(/^\s*>\s?/, "")); i++; }
+        out.push("<blockquote>" + q.map(function (x) { return x === "" ? "<br/>" : inline(x); }).join(" ") + "</blockquote>");
+        continue;
+      }
+      // Unordered list
+      if (/^\s*[-*+]\s+/.test(line)) {
+        var ul = [];
+        while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) { ul.push(lines[i].replace(/^\s*[-*+]\s+/, "")); i++; }
+        flushList("ul", ul); continue;
+      }
+      // Ordered list
+      if (/^\s*\d+[.)]\s+/.test(line)) {
+        var ol = [];
+        while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) { ol.push(lines[i].replace(/^\s*\d+[.)]\s+/, "")); i++; }
+        flushList("ol", ol); continue;
+      }
+      // Paragraph (gather until blank line)
+      var para = [];
+      while (i < lines.length && !/^\s*$/.test(lines[i]) &&
+        !/^(#{1,6})\s+/.test(lines[i]) && !/^\s*[-*+]\s+/.test(lines[i]) &&
+        !/^\s*\d+[.)]\s+/.test(lines[i]) && !/^\s*>\s?/.test(lines[i]) &&
+        !(lines[i].indexOf("|") !== -1 && i + 1 < lines.length && isTableSep(lines[i + 1]))) {
+        para.push(lines[i]); i++;
+      }
+      out.push("<p>" + inline(para.join(" ")) + "</p>");
+    }
+    return out.join("\n");
   }
 
   function copyPlan() {
