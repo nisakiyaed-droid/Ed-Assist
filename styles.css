@@ -314,6 +314,21 @@ input[type="file"]:hover{border-color:var(--brand);}
   margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid var(--line);}
 .output-toolbar h3{margin:0; font-size:var(--fs-h3); color:var(--navy); letter-spacing:-.01em;}
 .toolbar-actions{display:flex; gap:8px;}
+/* Keep Download / Share / Print completely away until generation is finished.
+   Two-class selector so it always beats the plain .toolbar-actions display. */
+.toolbar-actions.hidden{display:none !important;}
+
+/* Progress bar shown WHILE sessions are being written (the plan itself stays
+   hidden until every session is done). */
+.gen-progress{margin:0 0 14px;}
+.gen-progress.hidden{display:none;}
+.gen-progress-track{height:12px; border-radius:999px; background:var(--navy-soft);
+  border:1px solid #dde3f2; overflow:hidden;}
+.gen-progress-fill{height:100%; width:0; border-radius:999px;
+  background:linear-gradient(90deg, var(--brand), var(--purple));
+  transition:width .4s var(--ease);}
+.gen-progress-label{margin-top:8px; font-size:14px; font-weight:600; color:var(--navy);}
+.gen-progress-label::before{content:"⏳ ";}
 
 /* The generated plan, rendered in the school house style */
 .rendered{color:var(--ink); line-height:1.65; font-size:15.5px;}

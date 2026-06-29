@@ -29,6 +29,12 @@
     s.classList.remove("hidden");
   }
   function showToolbar(on) { el("toolbarActions").classList.toggle("hidden", !on); }
+  function showProgress(on) { el("genProgress").classList.toggle("hidden", !on); }
+  function setProgress(done, total, label) {
+    var pct = total ? Math.round((done / total) * 100) : 0;
+    el("genProgressFill").style.width = pct + "%";
+    el("genProgressLabel").textContent = label;
+  }
 
   // ---- Generate ALL sessions -------------------------------------------
   var planTitleText = "Lesson plan";
@@ -50,6 +56,24 @@
         return json;
       });
     });
+  }
+
+  // Retry a session a few times on transient failures (network blips, gateway
+  // timeouts) so one hiccup doesn't throw away the whole batch.
+  function postGenerateRetry(payload, onRetry) {
+    var maxTries = 3;
+    function attempt(n) {
+      return postGenerate(payload).catch(function (err) {
+        var msg = (err && err.message) || "";
+        var transient = /Failed to fetch|NetworkError|isn't connected|\b50\d\b|timed? ?out/i.test(msg);
+        if (n < maxTries && transient) {
+          if (onRetry) onRetry(n);
+          return new Promise(function (r) { setTimeout(r, 1500 * n); }).then(function () { return attempt(n + 1); });
+        }
+        throw err;
+      });
+    }
+    return attempt(1);
   }
 
   function handleSubmit(e) {
@@ -76,11 +100,14 @@
     var oldLabel = btn.textContent;
     btn.textContent = "Generating…";
     el("planResult").classList.remove("hidden");
-    el("planBody").innerHTML = "";
+    el("planBody").innerHTML = "";            // the plan itself stays hidden until ALL sessions are done
     currentSessions = []; lastMarkdown = "";
+    var anyTruncated = false;
     showToolbar(false);                       // buttons stay away until all sessions are done
+    showProgress(true);                       // only a progress bar shows during generation
+    setProgress(0, N, "Reading your chapter…");
+    el("genStatus").classList.add("hidden");
     el("planTitle").textContent = base.grade + " · " + base.subject + " · " + N + " session" + (N > 1 ? "s" : "");
-    setStatus("Reading your chapter…", "busy");
     el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
 
     var jobs = [];
@@ -91,25 +118,36 @@
       function next() {
         if (k >= N) return Promise.resolve();
         k++;
-        setStatus("Writing session " + k + " of " + N + "… (about half a minute each — please keep this page open)", "busy");
-        return postGenerate({
+        setProgress(k - 1, N, "Writing session " + k + " of " + N + "… (about half a minute each — please keep this page open)");
+        return postGenerateRetry({
           grade: base.grade, subject: base.subject, sessions: N, sessionNo: k,
           files: fileParts, prior: currentSessions.join("\n\n")
+        }, function (tryNo) {
+          setProgress(k - 1, N, "Connection hiccup — retrying session " + k + " (try " + (tryNo + 1) + " of 3)…");
         }).then(function (json) {
           currentSessions.push(json.markdown || "");
-          renderSessions(json.truncated);
+          if (json.truncated) anyTruncated = true;
+          setProgress(currentSessions.length, N,
+            currentSessions.length + " of " + N + " session" + (N > 1 ? "s" : "") + " ready" +
+            (currentSessions.length < N ? "…" : ""));
           return next();
         });
       }
       return next();
     }).then(function () {
-      el("genStatus").classList.add("hidden");
-      showToolbar(true);                      // only now are Download / Share / Print available
+      showProgress(false);
+      renderSessions(anyTruncated);           // reveal the whole plan at once
+      showToolbar(true);                       // only now are Download / Share / Print available
     }).catch(function (err) {
+      showProgress(false);
       var msg = err && err.message ? err.message : "Something went wrong.";
       if (/Failed to fetch|NetworkError/i.test(msg)) msg = "Couldn't reach the planner. Please check your internet and try again.";
-      setStatus(msg + (currentSessions.length ? "  (" + currentSessions.length + " session(s) are ready below.)" : ""), "error");
-      if (currentSessions.length) showToolbar(true);
+      if (currentSessions.length) {            // show whatever finished, plus the buttons
+        renderSessions(anyTruncated);
+        showToolbar(true);
+        msg += "  (" + currentSessions.length + " session(s) are ready below.)";
+      }
+      setStatus(msg, "error");
     }).then(function () {
       btn.disabled = false; btn.textContent = oldLabel;
     });
