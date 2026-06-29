@@ -109,12 +109,13 @@ async function callGemini(key, model, d, extraInstruction) {
   var body = {
     systemInstruction: { parts: [{ text: FRAMEWORK + "\n\n" + addendum(d) }] },
     contents: [{ role: "user", parts: parts }],
-    // gemini-2.5-flash is a thinking model — reasoning tokens count against this
-    // budget. 20000 was too low (the plan stopped mid-story). 40000 leaves ample
-    // room for thinking + the full plan including Part Three and the Evening Post.
-    // Lower temperature → steadier, more consistent plans run-to-run (the school
-    // wants reliable quality, not creative variance).
-    generationConfig: { temperature: 0.5, maxOutputTokens: 40000 }
+    // gemini-2.5-flash is a thinking model. Left uncapped it can think for 100s+
+    // (a single call hit 142s in testing) and blow past Vercel's 60s limit — the
+    // teacher sees "not connected". thinkingBudget caps the thinking so each call
+    // reliably finishes in ~30s, while maxOutputTokens 20000 still leaves ~14k for
+    // the full plan (thinking is capped, so it no longer crowds out the output and
+    // causes truncation). Lower temperature → steadier, more consistent plans.
+    generationConfig: { temperature: 0.5, maxOutputTokens: 20000, thinkingConfig: { thinkingBudget: 6000 } }
   };
 
   var url = "https://generativelanguage.googleapis.com/v1beta/models/" +
@@ -237,7 +238,10 @@ module.exports = async function (req, res) {
   d.sessionNo = d.sessionNo || "1";
   d.prior = d.prior || "";
 
-  // First attempt.
+  // ONE Gemini call. We deliberately do NOT auto-retry: a second ~30s call would
+  // risk exceeding Vercel's 60s function limit (which the teacher sees as "not
+  // connected"). The gate below instead flags a weak draft so the app can offer
+  // "Make again".
   var first = await callGemini(key, model, d);
   // Hard errors first, exactly as before: Gemini transport/API failure → 502,
   // a blocked prompt → 422. Empty text is NOT fatal here — we fall through to
@@ -251,65 +255,36 @@ module.exports = async function (req, res) {
     return;
   }
 
-  // Quality gate: if the first draft is complete and well-formed, ship it.
+  var draft = (first.text || "").trim();
+
+  // Guard against a rare degenerate run where the model loops and emits tens of
+  // thousands of characters. A normal one-session plan is ~12k chars; shipping a
+  // huge one makes a giant broken PDF, so treat it as no usable plan.
+  if (draft.length > 40000) {
+    res.status(502).json({ error: "The plan came out garbled. Please tap \"Make again\"." });
+    return;
+  }
+
+  // Quality gate: if the draft is complete and well-formed, ship it clean.
   if (planPasses(first, d)) {
     res.status(200).json({ markdown: first.text, truncated: false, finishReason: first.finishReason });
     return;
   }
 
-  // It failed the gate (or came back empty). Make ONE retry, naming what was
-  // missing so the model knows what to fix.
-  var firstMissing = validatePlan(first.text, d).missing;
-  if (first.finishReason && first.finishReason !== "STOP" && firstMissing.indexOf("incomplete") === -1) {
-    firstMissing.push("incomplete");
-  }
-  var extra = "Your previous draft was incomplete or malformed (missing: " +
-    (firstMissing.join(", ") || "required sections") + "). Write the COMPLETE plan " +
-    "again with every required section, ending with '## Part Three — After Class' and " +
-    "a full '### Evening Post'. Never stop inside the Story.";
-
-  var second = await callGemini(key, model, d, extra);
-  // A retry transport/API failure or a block is not fatal on its own — we may
-  // still have usable text from the first attempt. We only surface those below
-  // when neither attempt produced anything usable.
-  if (second.ok && !second.blockReason && planPasses(second, d)) {
-    res.status(200).json({ markdown: second.text, truncated: false, finishReason: second.finishReason });
-    return;
-  }
-
-  // Both attempts fell short of the gate. Return the better of the two when
-  // there is any usable text — never hard-fail on usable content. "Better" =
-  // a clean STOP wins; otherwise the longer draft.
-  var firstText = (first.text || "").trim();
-  var secondText = (second.text || "").trim();
-  var best = null;
-  if (firstText && secondText) {
-    var firstStop = first.finishReason === "STOP";
-    var secondStop = second.finishReason === "STOP";
-    if (firstStop !== secondStop) {
-      best = firstStop ? first : second;
-    } else {
-      best = firstText.length >= secondText.length ? first : second;
-    }
-  } else if (firstText) {
-    best = first;
-  } else if (secondText) {
-    best = second;
-  }
-
-  if (best) {
-    var bestTruncated = !(best.finishReason && best.finishReason === "STOP");
+  // It fell short of the gate but there is usable text: return it flagged
+  // lowQuality so the app shows a gentle warning and offers "Make again". We do
+  // not retry here (see the single-call note above).
+  if (draft) {
     res.status(200).json({
-      markdown: best.text,
-      truncated: !!bestTruncated,
-      finishReason: best.finishReason,
+      markdown: first.text,
+      truncated: !(first.finishReason && first.finishReason === "STOP"),
+      finishReason: first.finishReason,
       lowQuality: true
     });
     return;
   }
 
-  // Neither attempt produced any usable text at all — fall back to the existing
-  // "no plan came back" error.
+  // No usable text at all.
   res.status(502).json({ error: "No plan text came back (the model may have stopped early). Please try again." });
 };
 
