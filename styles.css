@@ -393,6 +393,8 @@ input[type="file"]:hover{border-color:var(--brand);}
 .toolbar-actions{flex-wrap:wrap;}
 .trunc-note{background:#fff7ef; border:1px solid #f3ddc4; color:#9a5b16;
   border-radius:10px; padding:10px 13px; margin:0 0 12px; font-size:14px;}
+/* Calm draft-assistant line under the toolbar */
+.ai-note{margin:0 0 14px; font-size:13px; color:var(--faint); line-height:1.5;}
 
 /* On-page plan: comfortable but tight (minimal whitespace) */
 .rendered{font-size:15px; line-height:1.55;}
@@ -529,7 +531,7 @@ input[type="file"]:hover{border-color:var(--brand);}
 /* Print: just the plan, tight */
 @media print{
   .site-header, .hero, .how, form, .sample, .site-footer,
-  .output-toolbar .toolbar-actions, .gen-status, .trunc-note{display:none !important;}
+  .output-toolbar .toolbar-actions, .gen-status, .trunc-note, .ai-note{display:none !important;}
   .panel{box-shadow:none; border:none; padding:0;}
   .result.hidden{display:none;}
   .output-toolbar{border:none; margin-bottom:8px;}

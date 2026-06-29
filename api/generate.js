@@ -87,38 +87,19 @@ function userMessage(d) {
   return lines.join("\n");
 }
 
-module.exports = async function (req, res) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Use POST." });
-    return;
-  }
-  var key = process.env.GEMINI_API_KEY;
-  if (!key) {
-    res.status(503).json({
-      error: "This planner isn't set up yet. The school needs to add the Gemini key once " +
-        "in Vercel → Settings → Environment Variables (name it GEMINI_API_KEY), then redeploy."
-    });
-    return;
-  }
-  var model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-
-  var d;
-  try {
-    d = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-  } catch (e) { d = {}; }
-
-  var files = Array.isArray(d.files) ? d.files : [];
-  if (!files.length) {
-    res.status(400).json({ error: "Please upload the chapter PDF so I can read the chapter." });
-    return;
-  }
-  d.grade = d.grade || "Grade 3";
-  d.subject = d.subject || "Environmental Studies";
-  d.sessions = d.sessions || "4";
-  d.sessionNo = d.sessionNo || "1";
-  d.prior = d.prior || "";
-
+// One Gemini round-trip. Builds the body (systemInstruction = FRAMEWORK +
+// addendum; contents = userMessage [+ optional extraInstruction for a retry]
+// followed by the inline file parts), POSTs, and returns a normalised result.
+// On any transport/JSON failure it returns ok:false with an errorMessage so the
+// caller decides how to surface it. Privacy: never logs the chapter or the plan.
+async function callGemini(key, model, d, extraInstruction) {
+  // Same file-part building as before: the user message first, then each file
+  // inlined as base64. A retry adds a short steering note after the user message.
   var parts = [{ text: userMessage(d) }];
+  if (extraInstruction) {
+    parts.push({ text: extraInstruction });
+  }
+  var files = Array.isArray(d.files) ? d.files : [];
   for (var i = 0; i < files.length; i++) {
     if (files[i] && files[i].data) {
       parts.push({ inlineData: { mimeType: files[i].mimeType || "application/octet-stream", data: files[i].data } });
@@ -151,26 +132,185 @@ module.exports = async function (req, res) {
 
     if (!gres.ok) {
       var m = (json && json.error && json.error.message) || ("Gemini request failed (" + gres.status + ").");
-      res.status(502).json({ error: m });
-      return;
+      return { ok: false, status: gres.status, text: "", finishReason: null, errorMessage: m, blockReason: null };
     }
     if (json && json.promptFeedback && json.promptFeedback.blockReason) {
-      res.status(422).json({ error: "The request was blocked (" + json.promptFeedback.blockReason + "). Try a different chapter file." });
-      return;
+      return { ok: true, status: gres.status, text: "", finishReason: null, errorMessage: null, blockReason: json.promptFeedback.blockReason };
     }
     var cand = json && json.candidates && json.candidates[0];
     var text = cand && cand.content && cand.content.parts
       ? cand.content.parts.map(function (p) { return p.text || ""; }).join("") : "";
-
-    if (!text.trim()) {
-      res.status(502).json({ error: "No plan text came back (the model may have stopped early). Please try again." });
-      return;
-    }
-    var truncated = cand && cand.finishReason && cand.finishReason !== "STOP";
-    res.status(200).json({ markdown: text, truncated: !!truncated, finishReason: cand && cand.finishReason });
+    return { ok: true, status: gres.status, text: text, finishReason: cand && cand.finishReason, errorMessage: null, blockReason: null };
   } catch (err) {
-    res.status(502).json({ error: "Couldn't reach Google to write the plan. Please try again in a moment." });
+    return { ok: false, status: 0, text: "", finishReason: null, errorMessage: "Couldn't reach Google to write the plan. Please try again in a moment.", blockReason: null };
   }
+}
+
+// Structural quality gate. Returns { ok, missing } where `missing` lists short
+// labels for whatever required section/shape is absent. The caller handles the
+// finishReason !== "STOP" check separately (a non-STOP plan is incomplete even
+// if every marker happens to be present). Privacy: inspects text in memory only.
+function validatePlan(text, d) {
+  var t = text || "";
+  var missing = [];
+
+  // A '# ' title line (markdown H1) must exist.
+  if (!/^#\s+/m.test(t)) { missing.push("title"); }
+  // The running chapter-progress note.
+  if (t.indexOf("Chapter Progress So Far:") === -1) { missing.push("progress"); }
+  // All three Parts.
+  if (t.indexOf("## Part One") === -1) { missing.push("Part One"); }
+  if (t.indexOf("## Part Two") === -1) { missing.push("Part Two"); }
+  if (t.indexOf("## Part Three") === -1) { missing.push("Part Three"); }
+  // The Evening Post (Google Classroom message) and the Story sub-sections.
+  // Match what the RENDERER accepts, not an exact string, so we don't retry a
+  // perfectly good plan over a tiny heading variation ("### Story —" etc.).
+  if (!/###\s+evening\s+post/i.test(t)) { missing.push("Evening Post"); }
+  if (!/###\s+(the\s+)?story\b/i.test(t)) { missing.push("Story"); }
+  // At least three timed in-class steps like '### 10 min ...'.
+  var timed = t.match(/###\s+\d+\s*min/g);
+  if (!timed || timed.length < 3) { missing.push("timed steps"); }
+  // A misconceptions table: a row with >=2 pipes immediately followed by a
+  // markdown separator row (dashes/colons between pipes).
+  var hasTable = false;
+  var rows = t.split("\n");
+  for (var r = 0; r < rows.length - 1; r++) {
+    var pipes = (rows[r].match(/\|/g) || []).length;
+    if (pipes >= 2 && /^\s*\|?[ :|-]*-[ :|-]*\|/.test(rows[r + 1])) {
+      hasTable = true;
+      break;
+    }
+  }
+  if (!hasTable) { missing.push("misconceptions table"); }
+  // Grade consistency: the requested grade must appear and no OTHER grade number.
+  var want = d && d.grade ? String(d.grade) : "";
+  var wantNo = (want.match(/Grade\s+(\d+)/) || [])[1];
+  if (want && t.indexOf(want) === -1) {
+    missing.push("grade");
+  } else if (wantNo) {
+    var gm = t.match(/Grade\s+(\d+)/g) || [];
+    for (var g = 0; g < gm.length; g++) {
+      var n = (gm[g].match(/Grade\s+(\d+)/) || [])[1];
+      if (n && n !== wantNo) { missing.push("grade"); break; }
+    }
+  }
+
+  return { ok: missing.length === 0, missing: missing };
+}
+
+// True when this attempt is a usable, complete, well-formed plan: there is text,
+// the model finished cleanly (STOP), and every structural check passes.
+function planPasses(result, d) {
+  if (!result || !result.text || !result.text.trim()) { return false; }
+  if (result.finishReason && result.finishReason !== "STOP") { return false; }
+  return validatePlan(result.text, d).ok;
+}
+
+module.exports = async function (req, res) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Use POST." });
+    return;
+  }
+  var key = process.env.GEMINI_API_KEY;
+  if (!key) {
+    res.status(503).json({
+      error: "This planner isn't set up yet. The school needs to add the Gemini key once " +
+        "in Vercel → Settings → Environment Variables (name it GEMINI_API_KEY), then redeploy."
+    });
+    return;
+  }
+  var model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+  var d;
+  try {
+    d = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+  } catch (e) { d = {}; }
+
+  var files = Array.isArray(d.files) ? d.files : [];
+  if (!files.length) {
+    res.status(400).json({ error: "Please upload the chapter PDF so I can read the chapter." });
+    return;
+  }
+  d.grade = d.grade || "Grade 3";
+  d.subject = d.subject || "Environmental Studies";
+  d.sessions = d.sessions || "4";
+  d.sessionNo = d.sessionNo || "1";
+  d.prior = d.prior || "";
+
+  // First attempt.
+  var first = await callGemini(key, model, d);
+  // Hard errors first, exactly as before: Gemini transport/API failure → 502,
+  // a blocked prompt → 422. Empty text is NOT fatal here — we fall through to
+  // the retry below.
+  if (!first.ok) {
+    res.status(502).json({ error: first.errorMessage });
+    return;
+  }
+  if (first.blockReason) {
+    res.status(422).json({ error: "The request was blocked (" + first.blockReason + "). Try a different chapter file." });
+    return;
+  }
+
+  // Quality gate: if the first draft is complete and well-formed, ship it.
+  if (planPasses(first, d)) {
+    res.status(200).json({ markdown: first.text, truncated: false, finishReason: first.finishReason });
+    return;
+  }
+
+  // It failed the gate (or came back empty). Make ONE retry, naming what was
+  // missing so the model knows what to fix.
+  var firstMissing = validatePlan(first.text, d).missing;
+  if (first.finishReason && first.finishReason !== "STOP" && firstMissing.indexOf("incomplete") === -1) {
+    firstMissing.push("incomplete");
+  }
+  var extra = "Your previous draft was incomplete or malformed (missing: " +
+    (firstMissing.join(", ") || "required sections") + "). Write the COMPLETE plan " +
+    "again with every required section, ending with '## Part Three — After Class' and " +
+    "a full '### Evening Post'. Never stop inside the Story.";
+
+  var second = await callGemini(key, model, d, extra);
+  // A retry transport/API failure or a block is not fatal on its own — we may
+  // still have usable text from the first attempt. We only surface those below
+  // when neither attempt produced anything usable.
+  if (second.ok && !second.blockReason && planPasses(second, d)) {
+    res.status(200).json({ markdown: second.text, truncated: false, finishReason: second.finishReason });
+    return;
+  }
+
+  // Both attempts fell short of the gate. Return the better of the two when
+  // there is any usable text — never hard-fail on usable content. "Better" =
+  // a clean STOP wins; otherwise the longer draft.
+  var firstText = (first.text || "").trim();
+  var secondText = (second.text || "").trim();
+  var best = null;
+  if (firstText && secondText) {
+    var firstStop = first.finishReason === "STOP";
+    var secondStop = second.finishReason === "STOP";
+    if (firstStop !== secondStop) {
+      best = firstStop ? first : second;
+    } else {
+      best = firstText.length >= secondText.length ? first : second;
+    }
+  } else if (firstText) {
+    best = first;
+  } else if (secondText) {
+    best = second;
+  }
+
+  if (best) {
+    var bestTruncated = !(best.finishReason && best.finishReason === "STOP");
+    res.status(200).json({
+      markdown: best.text,
+      truncated: !!bestTruncated,
+      finishReason: best.finishReason,
+      lowQuality: true
+    });
+    return;
+  }
+
+  // Neither attempt produced any usable text at all — fall back to the existing
+  // "no plan came back" error.
+  res.status(502).json({ error: "No plan text came back (the model may have stopped early). Please try again." });
 };
 
 module.exports.config = { maxDuration: 60 };

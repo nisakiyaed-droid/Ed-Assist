@@ -45,6 +45,31 @@
   var planTitleText = "Lesson plan";
   var currentSessions = [];
   var lastMarkdown = "";
+  // Remembered inputs from the last run, so "Make again" can repeat it exactly
+  // without re-reading the file from disk.
+  var lastRun = null; // { base, fileParts }
+
+  // ---- Remember last choice (grade / subject / sessions) ----------------
+  function loadLastChoice() {
+    try {
+      var pairs = [["grade", "ddis.grade"], ["subject", "ddis.subject"], ["sessions", "ddis.sessions"]];
+      for (var i = 0; i < pairs.length; i++) {
+        var saved = localStorage.getItem(pairs[i][1]);
+        if (saved == null) continue;
+        var sel = el(pairs[i][0]);
+        for (var o = 0; o < sel.options.length; o++) {
+          if (sel.options[o].value === saved) { sel.value = saved; break; }
+        }
+      }
+    } catch (e) { /* localStorage may be unavailable — keep HTML defaults */ }
+  }
+  function saveLastChoice() {
+    try {
+      localStorage.setItem("ddis.grade", el("grade").value);
+      localStorage.setItem("ddis.subject", el("subject").value);
+      localStorage.setItem("ddis.sessions", el("sessions").value);
+    } catch (e) { /* ignore — saving the choice is non-critical */ }
+  }
 
   function postGenerate(payload) {
     return fetch("api/generate", {
@@ -54,7 +79,7 @@
         var json; try { json = JSON.parse(raw); } catch (e) { json = null; }
         if (!res.ok || !json) {
           if (res.status === 404 || res.status === 405 || !json) {
-            throw new Error("This page shows the planner, but the school's generator isn't connected here yet. Please open the school's Lesson Planner link (the one set up on Vercel).");
+            throw new Error("The plan maker is not connected here yet. Please open the school's Lesson Planner link.");
           }
           throw new Error((json && json.error) || ("Request failed (" + res.status + ")."));
         }
@@ -92,22 +117,43 @@
     for (var i = 0; i < files.length; i++) total += files[i].size;
     if (total > MAX_BYTES) {
       el("planResult").classList.remove("hidden"); el("planBody").innerHTML = ""; showToolbar(false);
-      setStatus("Your upload is " + (total / 1048576).toFixed(1) + " MB. Please keep it under 3 MB — try a smaller or shorter chapter PDF.", "warn");
+      setStatus("Your file is " + (total / 1048576).toFixed(1) + " MB. Please keep it under 3 MB — try a smaller or shorter chapter PDF.", "warn");
       el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
 
+    saveLastChoice();                         // remember grade / subject / sessions
     var N = parseInt(el("sessions").value, 10) || 1;
     var base = { grade: el("grade").value, subject: el("subject").value, sessions: N };
+
+    var jobs = [];
+    for (var j = 0; j < files.length; j++) jobs.push(fileToInline(files[j]));
+    Promise.all(jobs).then(function (fileParts) {
+      runGeneration(base, fileParts);
+    });
+  }
+
+  // Re-run the last generation with the SAME inputs, reusing the already-read
+  // file parts so we never read the file from disk again.
+  function regenerate() {
+    if (!lastRun) return;
+    runGeneration(lastRun.base, lastRun.fileParts);
+  }
+
+  // Core generation flow — used by both Generate and "Make again".
+  function runGeneration(base, fileParts) {
+    var N = base.sessions;
+    lastRun = { base: base, fileParts: fileParts }; // cache for "Make again"
 
     var btn = el("generateBtn");
     btn.disabled = true;
     var oldLabel = btn.textContent;
-    btn.textContent = "Generating…";
+    btn.textContent = "Making your plan…";
     el("planResult").classList.remove("hidden");
     el("planBody").innerHTML = "";            // the plan itself stays hidden until ALL sessions are done
     currentSessions = []; lastMarkdown = "";
     var anyTruncated = false;
+    var anyLowQuality = false;
     showToolbar(false);                       // buttons stay away until all sessions are done
     showProgress(true);                       // only a progress bar shows during generation
     setProgress(0, N, "Reading your chapter…");
@@ -116,40 +162,37 @@
     setMeta([base.grade, base.subject, N + " session" + (N > 1 ? "s" : "")]);
     el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
 
-    var jobs = [];
-    for (var j = 0; j < files.length; j++) jobs.push(fileToInline(files[j]));
+    var k = 0;
+    function next() {
+      if (k >= N) return Promise.resolve();
+      k++;
+      setProgress(k - 1, N, "Writing session " + k + " of " + N + "… (about half a minute each — please keep this page open)");
+      return postGenerateRetry({
+        grade: base.grade, subject: base.subject, sessions: N, sessionNo: k,
+        files: fileParts, prior: currentSessions.join("\n\n")
+      }, function (tryNo) {
+        setProgress(k - 1, N, "Slow connection — trying session " + k + " again (try " + (tryNo + 1) + " of 3)…");
+      }).then(function (json) {
+        currentSessions.push(json.markdown || "");
+        if (json.truncated) anyTruncated = true;
+        if (json.lowQuality) anyLowQuality = true;
+        setProgress(currentSessions.length, N,
+          currentSessions.length + " of " + N + " session" + (N > 1 ? "s" : "") + " ready" +
+          (currentSessions.length < N ? "…" : ""));
+        return next();
+      });
+    }
 
-    Promise.all(jobs).then(function (fileParts) {
-      var k = 0;
-      function next() {
-        if (k >= N) return Promise.resolve();
-        k++;
-        setProgress(k - 1, N, "Writing session " + k + " of " + N + "… (about half a minute each — please keep this page open)");
-        return postGenerateRetry({
-          grade: base.grade, subject: base.subject, sessions: N, sessionNo: k,
-          files: fileParts, prior: currentSessions.join("\n\n")
-        }, function (tryNo) {
-          setProgress(k - 1, N, "Connection hiccup — retrying session " + k + " (try " + (tryNo + 1) + " of 3)…");
-        }).then(function (json) {
-          currentSessions.push(json.markdown || "");
-          if (json.truncated) anyTruncated = true;
-          setProgress(currentSessions.length, N,
-            currentSessions.length + " of " + N + " session" + (N > 1 ? "s" : "") + " ready" +
-            (currentSessions.length < N ? "…" : ""));
-          return next();
-        });
-      }
-      return next();
-    }).then(function () {
+    Promise.resolve().then(next).then(function () {
       showProgress(false);
-      renderSessions(anyTruncated);           // reveal the whole plan at once
+      renderSessions(anyTruncated || anyLowQuality); // reveal the whole plan at once
       showToolbar(true);                       // only now are Download / Share / Print available
     }).catch(function (err) {
       showProgress(false);
-      var msg = err && err.message ? err.message : "Something went wrong.";
-      if (/Failed to fetch|NetworkError/i.test(msg)) msg = "Couldn't reach the planner. Please check your internet and try again.";
+      var msg = err && err.message ? err.message : "Something went wrong. Please tap “Make again”.";
+      if (/Failed to fetch|NetworkError/i.test(msg)) msg = "Couldn't reach the plan maker. Please check your internet and tap “Make again”.";
       if (currentSessions.length) {            // show whatever finished, plus the buttons
-        renderSessions(anyTruncated);
+        renderSessions(anyTruncated || anyLowQuality);
         showToolbar(true);
         msg += "  (" + currentSessions.length + " session(s) are ready below.)";
       }
@@ -172,7 +215,7 @@
       return '<section class="plan-session">' + mdToHtml(md) + "</section>";
     }).join("");
     if (truncated) {
-      html = '<div class="trunc-note">⚠️ A session may have stopped early. You can press Generate again if needed.</div>' + html;
+      html = '<div class="trunc-note">⚠️ This plan may be incomplete. Please tap “Make again” for a fresh one.</div>' + html;
     }
     el("planBody").innerHTML = html;
     planTitleText = chapterTitle();
@@ -432,10 +475,12 @@
 
   // ---- Wiring -----------------------------------------------------------
   document.addEventListener("DOMContentLoaded", function () {
+    loadLastChoice();
     el("chapter-form").addEventListener("submit", handleSubmit);
     el("pdfBtn").addEventListener("click", downloadPdf);
     el("waBtn").addEventListener("click", sharePdf);
     el("printPlanBtn").addEventListener("click", function () { window.print(); });
+    el("regenBtn").addEventListener("click", regenerate);
     el("chapterFile").addEventListener("change", function () {
       if (el("chapterFile").files.length) el("field-chapterFile").classList.remove("invalid");
     });
