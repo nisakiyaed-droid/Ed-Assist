@@ -10,6 +10,14 @@ children follow across the chapter.
 > payment. (Version 2 — generating plans inside the website itself — needs the
 > paid Claude key. We add that when you're ready.)
 
+## 🌐 Live site
+
+**https://nisakiyaed-droid.github.io/Ed-Assist/**
+
+The site is published with GitHub Pages from the `gh-pages` branch. To update the
+live site after changes, push the latest content to that branch:
+`git push origin HEAD:gh-pages`
+
 ---
 
 ## What's in this project
@@ -21,24 +29,19 @@ children follow across the chapter.
 | `docs/house-style-and-readability.md` | The color palette and the reading-level rules |
 | `docs/preview/` | A colored sample plan (image + printable page) |
 | `docs/samples/` | A full sample chapter (4 sessions + summary) |
-| `.github/workflows/deploy-pages.yml` | Publishes the site online automatically |
+| `404.html`, `vercel.json` | A friendly not-found page and Vercel config |
 
 ---
 
-## How to make it live (a shareable link) — one-time setup
+## It's already live
 
-The site is ready to publish for free with GitHub Pages:
+The site is published and public — no setup needed:
+**https://nisakiyaed-droid.github.io/Ed-Assist/**
 
-1. On GitHub, open this repository.
-2. Go to **Settings → Pages**.
-3. Under **Build and deployment → Source**, choose **GitHub Actions**.
-4. That's it. Within a minute or two you'll get a public link like
-   `https://YOUR-NAME.github.io/Ed-Assist/` to share with teachers.
+To update it after we change something, push the latest content to the publish
+branch: `git push origin HEAD:gh-pages`. The site refreshes in a minute or two.
 
-After this, every change we push updates the live site by itself.
-
-*(Prefer not to touch settings? You can also just open `index.html` on your
-computer to use the app locally.)*
+*(You can also just open `index.html` on your computer to use the app locally.)*
 
 ---
 
