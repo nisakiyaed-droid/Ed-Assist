@@ -94,26 +94,17 @@
             </label>
           </div>
 
-          <label class="field third">
-            <span class="field-label">Which session to make now?</span>
-            <select id="sessionNo">
-              <option selected>1</option><option>2</option><option>3</option>
-              <option>4</option><option>5</option><option>6</option>
-              <option>7</option><option>8</option>
-            </select>
-          </label>
-
-          <button type="submit" class="btn primary full" id="generateBtn">Generate lesson plan</button>
+          <button type="submit" class="btn primary full" id="generateBtn">Generate all sessions</button>
         </form>
 
         <!-- GENERATED PLAN -->
         <div id="planResult" class="result hidden">
           <div class="output-toolbar">
             <h3 id="planTitle">Your lesson plan</h3>
-            <div class="toolbar-actions">
-              <button type="button" class="btn small primary" id="pdfBtn" disabled>Download PDF</button>
-              <button type="button" class="btn small ghost" id="waBtn" disabled>Share on WhatsApp</button>
-              <button type="button" class="btn small ghost" id="printPlanBtn" disabled>Print</button>
+            <div class="toolbar-actions hidden" id="toolbarActions">
+              <button type="button" class="btn small primary" id="pdfBtn">Download PDF</button>
+              <button type="button" class="btn small ghost" id="waBtn">Share on WhatsApp</button>
+              <button type="button" class="btn small ghost" id="printPlanBtn">Print</button>
             </div>
           </div>
           <div id="genStatus" class="gen-status hidden" role="status" aria-live="assertive"></div>

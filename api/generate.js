@@ -26,7 +26,7 @@ function addendum(d) {
 }
 
 function userMessage(d) {
-  return [
+  var lines = [
     "School: Dr. Dasarathan International School, Coimbatore, Tamil Nadu (ICSE).",
     "Grade: " + d.grade,
     "Subject: " + d.subject,
@@ -35,7 +35,19 @@ function userMessage(d) {
     "",
     "The chapter pages are attached. Detect the chapter number and name from them,",
     "then write the complete Session " + d.sessionNo + " plan now."
-  ].join("\n");
+  ];
+  if (d.prior && String(d.prior).trim()) {
+    lines.push(
+      "",
+      "=== EARLIER SESSIONS OF THIS CHAPTER (already written) ===",
+      "Use the SAME chapter number/name and the SAME story character and Tamil Nadu",
+      "setting as below, continuing the story forward (do not restart it). Do not repeat",
+      "content already covered — move the chapter ahead for Session " + d.sessionNo + ".",
+      String(d.prior).slice(0, 8000),
+      "=== END EARLIER SESSIONS ==="
+    );
+  }
+  return lines.join("\n");
 }
 
 module.exports = async function (req, res) {
@@ -67,6 +79,7 @@ module.exports = async function (req, res) {
   d.subject = d.subject || "Environmental Studies";
   d.sessions = d.sessions || "4";
   d.sessionNo = d.sessionNo || "1";
+  d.prior = d.prior || "";
 
   var parts = [{ text: userMessage(d) }];
   for (var i = 0; i < files.length; i++) {

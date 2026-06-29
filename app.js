@@ -28,65 +28,16 @@
     s.textContent = text;
     s.classList.remove("hidden");
   }
-  function setButtonsEnabled(on) {
-    el("pdfBtn").disabled = !on;
-    el("waBtn").disabled = !on;
-    el("printPlanBtn").disabled = !on;
-  }
+  function showToolbar(on) { el("toolbarActions").classList.toggle("hidden", !on); }
 
-  // ---- Generate ---------------------------------------------------------
+  // ---- Generate ALL sessions -------------------------------------------
   var planTitleText = "Lesson plan";
+  var currentSessions = [];
+  var lastMarkdown = "";
 
-  function handleSubmit(e) {
-    e.preventDefault();
-    var files = el("chapterFile").files;
-    var field = el("field-chapterFile");
-    if (!files || !files.length) {
-      field.classList.add("invalid");
-      el("chapterFile").focus();
-      return;
-    }
-    field.classList.remove("invalid");
-
-    var total = 0;
-    for (var i = 0; i < files.length; i++) total += files[i].size;
-    if (total > MAX_BYTES) {
-      el("planResult").classList.remove("hidden");
-      el("planBody").innerHTML = "";
-      setButtonsEnabled(false);
-      setStatus("Your upload is " + (total / 1048576).toFixed(1) + " MB. Please keep it under 3 MB — try a PDF, or fewer / smaller photos.", "warn");
-      el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-
-    var data = {
-      grade: el("grade").value,
-      subject: el("subject").value,
-      sessions: el("sessions").value,
-      sessionNo: el("sessionNo").value
-    };
-
-    var btn = el("generateBtn");
-    btn.disabled = true;
-    var oldLabel = btn.textContent;
-    btn.textContent = "Generating…";
-    el("planResult").classList.remove("hidden");
-    el("planBody").innerHTML = "";
-    setButtonsEnabled(false);
-    el("planTitle").textContent = data.grade + " · " + data.subject + " · Session " + data.sessionNo;
-    setStatus("Reading your chapter and writing the plan… this can take up to a minute.", "busy");
-    el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
-
-    var jobs = [];
-    for (var j = 0; j < files.length; j++) jobs.push(fileToInline(files[j]));
-
-    Promise.all(jobs).then(function (parts) {
-      data.files = parts;
-      return fetch("api/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data)
-      });
+  function postGenerate(payload) {
+    return fetch("api/generate", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
     }).then(function (res) {
       return res.text().then(function (raw) {
         var json; try { json = JSON.parse(raw); } catch (e) { json = null; }
@@ -98,30 +49,91 @@
         }
         return json;
       });
-    }).then(function (json) {
-      el("genStatus").classList.add("hidden");
-      renderPlan(json.markdown, json.truncated);
-      setButtonsEnabled(true);
-    }).catch(function (err) {
-      var msg = err && err.message ? err.message : "Something went wrong.";
-      if (/Failed to fetch|NetworkError/i.test(msg)) msg = "Couldn't reach the planner. Please check your internet and try again.";
-      setStatus(msg, "error");
-    }).then(function () {
-      btn.disabled = false;
-      btn.textContent = oldLabel;
     });
   }
 
-  var lastMarkdown = "";
-  function renderPlan(markdown, truncated) {
-    lastMarkdown = markdown || "";
-    var banner = truncated
-      ? '<div class="trunc-note">⚠️ This plan may have stopped early. You can press Generate again, or pick a shorter session.</div>'
-      : "";
-    el("planBody").innerHTML = banner + mdToHtml(lastMarkdown);
-    var h1 = el("planBody").querySelector("h1");
-    planTitleText = h1 ? h1.textContent : "Lesson plan";
-    el("planTitle").textContent = planTitleText;
+  function handleSubmit(e) {
+    e.preventDefault();
+    var files = el("chapterFile").files;
+    var field = el("field-chapterFile");
+    if (!files || !files.length) { field.classList.add("invalid"); el("chapterFile").focus(); return; }
+    field.classList.remove("invalid");
+
+    var total = 0;
+    for (var i = 0; i < files.length; i++) total += files[i].size;
+    if (total > MAX_BYTES) {
+      el("planResult").classList.remove("hidden"); el("planBody").innerHTML = ""; showToolbar(false);
+      setStatus("Your upload is " + (total / 1048576).toFixed(1) + " MB. Please keep it under 3 MB — try a PDF, or fewer / smaller photos.", "warn");
+      el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    var N = parseInt(el("sessions").value, 10) || 1;
+    var base = { grade: el("grade").value, subject: el("subject").value, sessions: N };
+
+    var btn = el("generateBtn");
+    btn.disabled = true;
+    var oldLabel = btn.textContent;
+    btn.textContent = "Generating…";
+    el("planResult").classList.remove("hidden");
+    el("planBody").innerHTML = "";
+    currentSessions = []; lastMarkdown = "";
+    showToolbar(false);                       // buttons stay away until all sessions are done
+    el("planTitle").textContent = base.grade + " · " + base.subject + " · " + N + " session" + (N > 1 ? "s" : "");
+    setStatus("Reading your chapter…", "busy");
+    el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
+
+    var jobs = [];
+    for (var j = 0; j < files.length; j++) jobs.push(fileToInline(files[j]));
+
+    Promise.all(jobs).then(function (fileParts) {
+      var k = 0;
+      function next() {
+        if (k >= N) return Promise.resolve();
+        k++;
+        setStatus("Writing session " + k + " of " + N + "… (about half a minute each — please keep this page open)", "busy");
+        return postGenerate({
+          grade: base.grade, subject: base.subject, sessions: N, sessionNo: k,
+          files: fileParts, prior: currentSessions.join("\n\n")
+        }).then(function (json) {
+          currentSessions.push(json.markdown || "");
+          renderSessions(json.truncated);
+          return next();
+        });
+      }
+      return next();
+    }).then(function () {
+      el("genStatus").classList.add("hidden");
+      showToolbar(true);                      // only now are Download / Share / Print available
+    }).catch(function (err) {
+      var msg = err && err.message ? err.message : "Something went wrong.";
+      if (/Failed to fetch|NetworkError/i.test(msg)) msg = "Couldn't reach the planner. Please check your internet and try again.";
+      setStatus(msg + (currentSessions.length ? "  (" + currentSessions.length + " session(s) are ready below.)" : ""), "error");
+      if (currentSessions.length) showToolbar(true);
+    }).then(function () {
+      btn.disabled = false; btn.textContent = oldLabel;
+    });
+  }
+
+  function chapterTitle() {
+    if (!currentSessions.length) return "Lesson plan";
+    var m = currentSessions[0].match(/^#\s+(.+)$/m);
+    var t = m ? m[1] : "Lesson plan";
+    return t.replace(/\s*[—-]\s*Session.*$/i, "").trim();
+  }
+
+  function renderSessions(truncated) {
+    lastMarkdown = currentSessions.join("\n\n");
+    var html = currentSessions.map(function (md) {
+      return '<section class="plan-session">' + mdToHtml(md) + "</section>";
+    }).join("");
+    if (truncated) {
+      html = '<div class="trunc-note">⚠️ A session may have stopped early. You can press Generate again if needed.</div>' + html;
+    }
+    el("planBody").innerHTML = html;
+    planTitleText = chapterTitle();
+    var N = parseInt(el("sessions").value, 10) || currentSessions.length;
+    el("planTitle").textContent = planTitleText + " · " + currentSessions.length + "/" + N + " sessions";
   }
 
   // ---- Safe Markdown renderer (no external dependency) ------------------
@@ -199,18 +211,33 @@
   function buildPdfElement() {
     var wrap = document.createElement("div");
     wrap.className = "pdf-doc";
-    wrap.innerHTML =
+    // Text-only header (no <img>) — keeps html2canvas from rendering a blank page
+    // while an image is still decoding.
+    var head =
       '<div class="pdf-head">' +
-        '<img src="assets/school-mark.png" alt="" />' +
-        '<div><div class="pdf-school">Dr. Dasarathan International School</div>' +
-        '<div class="pdf-motto">Inspire… Explore… Excel… · ICSE, Coimbatore</div></div>' +
-      '</div>' +
-      '<div class="rendered">' + mdToHtml(lastMarkdown) + '</div>';
+        '<div class="pdf-school">Dr. Dasarathan International School</div>' +
+        '<div class="pdf-motto">Inspire… Explore… Excel… · ICSE, Coimbatore</div>' +
+        '<div class="pdf-plan">' + esc(planTitleText) + '</div>' +
+      '</div>';
+    var body = currentSessions.map(function (md) {
+      return '<section class="plan-session"><div class="rendered">' + mdToHtml(md) + '</div></section>';
+    }).join("");
+    wrap.innerHTML = head + body;
     return wrap;
   }
   function makePdfWorker() {
+    // html2canvas only captures elements that are in normal document flow, so we
+    // mount the plan inside a full-screen white overlay (hidden from the teacher)
+    // rather than off-screen — off-screen renders a blank page.
+    var stage = document.createElement("div");
+    stage.className = "pdf-stage";
+    var msg = document.createElement("div");
+    msg.className = "pdf-stage-msg";
+    msg.textContent = "Preparing your PDF…";
     var element = buildPdfElement();
-    document.body.appendChild(element);
+    stage.appendChild(msg);
+    stage.appendChild(element);
+    document.body.appendChild(stage);
     var opt = {
       margin: [10, 10, 12, 10],
       filename: pdfFilename(),
@@ -220,15 +247,15 @@
       pagebreak: { mode: ["css", "legacy"] }
     };
     var worker = window.html2pdf().set(opt).from(element);
-    return { worker: worker, cleanup: function () { document.body.removeChild(element); } };
+    return { worker: worker, cleanup: function () { if (stage.parentNode) document.body.removeChild(stage); } };
   }
   function downloadPdf() {
-    if (!lastMarkdown || !window.html2pdf) return;
+    if (!currentSessions.length || !window.html2pdf) return;
     var j = makePdfWorker();
     j.worker.save().then(j.cleanup, j.cleanup);
   }
   function sharePdf() {
-    if (!lastMarkdown || !window.html2pdf) return;
+    if (!currentSessions.length || !window.html2pdf) return;
     var j = makePdfWorker();
     j.worker.outputPdf("blob").then(function (blob) {
       j.cleanup();

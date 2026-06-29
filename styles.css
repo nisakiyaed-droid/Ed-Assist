@@ -396,14 +396,29 @@ input[type="file"]:hover{border-color:var(--brand);}
   .rendered td:first-child{color:var(--purple); font-weight:600;}
 }
 
-/* PDF document — rendered offscreen, compact, printout-friendly */
-.pdf-doc{position:fixed; left:-9999px; top:0; width:760px; background:#fff; color:#1b2230;
+/* On-screen divider between sessions */
+.plan-session + .plan-session{margin-top:26px; padding-top:22px; border-top:2px dashed var(--brand-soft);}
+
+/* Disabled buttons (e.g. while generating) read as clearly inactive */
+.btn:disabled, .btn[disabled]{opacity:.55; cursor:not-allowed; filter:grayscale(.25);}
+
+/* PDF document. html2canvas ONLY captures elements that are in normal document
+   flow — position:fixed/absolute or left:-9999px all produce a blank page. So we
+   render the plan in normal flow inside a full-screen white overlay (.pdf-stage)
+   that hides it from the teacher while the PDF is built. */
+.pdf-stage{position:fixed; inset:0; z-index:2000; overflow:auto;
+  background:#fff; display:flex; flex-direction:column; align-items:center;}
+.pdf-stage-msg{font-family:"Inter",system-ui,sans-serif; color:var(--navy);
+  font-weight:600; font-size:15px; padding:18px 0 6px;}
+.pdf-stage-msg::before{content:"⏳ ";}
+.pdf-doc{width:760px; max-width:100%; background:#fff; color:#1b2230; margin:0 auto;
   font-family:"Inter",system-ui,-apple-system,Segoe UI,Roboto,sans-serif; padding:0 4px;}
-.pdf-head{display:flex; align-items:center; gap:12px; padding:0 0 10px; margin-bottom:12px;
-  border-bottom:2px solid var(--brand-soft);}
-.pdf-head img{height:42px; width:auto;}
-.pdf-school{font-weight:800; color:var(--navy); font-size:17px; letter-spacing:-.01em;}
-.pdf-motto{font-size:12px; color:var(--soft); font-style:italic;}
+.pdf-head{padding:0 0 10px; margin-bottom:12px; border-bottom:2px solid var(--brand-soft);}
+.pdf-school{font-weight:800; color:var(--navy); font-size:18px; letter-spacing:-.01em;}
+.pdf-motto{font-size:12px; color:var(--soft); font-style:italic; margin-top:2px;}
+.pdf-plan{font-size:13px; color:var(--faint); font-weight:600; margin-top:4px;}
+.pdf-doc .plan-session{break-before:page; page-break-before:always; padding-top:6px;}
+.pdf-doc .plan-session:first-of-type{break-before:auto; page-break-before:auto; padding-top:0;}
 .pdf-doc .rendered{font-size:13.5px; line-height:1.5;}
 .pdf-doc .rendered h1{font-size:19px; color:var(--navy); margin:0 0 8px;}
 .pdf-doc .rendered h2{font-size:15px; margin:13px 0 5px;}
