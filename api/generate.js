@@ -5,66 +5,58 @@
 
 var FRAMEWORK = require("./framework.js");
 
+// App-specific overlay on the Framework above. Adds only the output format,
+// the hard constraints, and faithfulness — it does NOT re-explain the pedagogy
+// the Framework already defines.
 function addendum(d) {
+  var session = "Session " + d.sessionNo + " of " + d.sessions;
   return [
     "",
-    "=== HOW TO RESPOND IN THIS APP ===",
-    "You are writing ONE complete, ready-to-teach session plan in a single reply.",
-    "Do not ask questions and do not wait for approval.",
-    "READ THE ATTACHED CHAPTER PAGES and work out the Chapter Number and Chapter Name",
-    "yourself from them — never ask the teacher for these.",
-    "Write the full plan for the requested session using the three labelled parts",
-    "(Part One — Before Class; Part Two — During Class, Enhanced sequence leading;",
-    "Part Three — After Class), the warm house style, a Story grounded in a Tamil Nadu /",
-    "Coimbatore setting, and the Evening Post.",
-    "Begin with ONE Markdown '# ' heading in exactly this shape:",
-    "'# Chapter <number>: <name> — Session " + d.sessionNo + " of " + d.sessions + "'.",
+    "=== TASK ===",
+    "Write ONE complete, ready-to-teach plan for " + session + ", in a single reply.",
+    "Do not ask questions or wait for approval. Detect the chapter number and name",
+    "from the attached pages yourself.",
     "",
-    "=== LAYOUT (use these EXACT markers — the app colour-codes them) ===",
-    "- Right after the title, write one line: 'Chapter Progress So Far: <one or two sentences>'.",
-    "- Use these three part headings exactly, as '## ' headings:",
-    "    '## Part One — Before Class'",
-    "    '## Part Two — During Class'",
-    "    '## Part Three — After Class'",
-    "- For every smaller section (Learning Outcomes, Anticipated Misconceptions, etc.)",
-    "  use a '### ' heading.",
-    "- Early in Part One, add a '### Cue Colours Used in This Plan' heading on its own",
-    "  (the app prints the coloured key automatically — do not list the colours yourself).",
-    "- Write each In-Class teaching step as a '### ' heading in this shape:",
-    "    '### <minutes> min — <Step title>'   (e.g. '### 3 min — Hook')",
-    "  then ONE short line describing what the teacher does.",
-    "- Write the story as a '### The Story — <story title>' heading, then 1-2 short",
-    "  paragraphs; put the reflective sentence in *italics*.",
-    "- Write any amazing fact as a paragraph starting 'Did You Know? ...'.",
-    "- Put the Google-Classroom message under a '### Evening Post' heading.",
+    "=== GROUND IT IN THE CHAPTER (do not invent) ===",
+    "Draw every activity, example, word, story detail, and question from the ATTACHED",
+    "chapter only. Do not add facts, characters, or content the chapter does not support.",
     "",
-    "=== GRADE (must stay consistent) ===",
-    "This plan is for " + d.grade + ". Pitch every activity, word, and example at " + d.grade + ".",
-    "Every place the text names a grade it must say '" + d.grade + "' — never any other grade.",
+    "=== GRADE ===",
+    "Pitch everything at " + d.grade + ". Wherever the text names a grade it must say",
+    "'" + d.grade + "' — never another grade.",
     "",
-    "=== SCOPE (do not overload young learners) ===",
-    "Teach only ONE or TWO focal skills in this session, suitable for " + d.grade + ".",
-    "Across the " + d.sessions + " sessions, spread the chapter's skills so each session has a",
-    "clear focus; treat anything already covered in earlier sessions as quick spiral review,",
-    "not new teaching. Do not cram every concept into one period.",
+    "=== SCOPE ===",
+    "Teach 1-2 focal skills this session. Across the " + d.sessions + " sessions, spread the",
+    "chapter's skills so each has a clear focus; treat earlier-covered content as quick",
+    "review and never repeat what an earlier session already taught.",
     "",
-    "=== QUALITY RULES ===",
-    "- Learning Outcomes: 3-5, written as observable, measurable statements with a success",
-    "  threshold (e.g. 'match 4 of 5 synonym pairs', 'turn 3 verbs into the past tense').",
-    "- The Misconceptions table must have EXACTLY three columns and three rows:",
-    "  'What the child says | Why it happens | What the teacher does'. Fill all three columns.",
+    "=== OUTPUT FORMAT (exact markers — the app colour-codes them) ===",
+    "Line 1:  # Chapter <number>: <name> — " + session,
+    "Line 2:  Chapter Progress So Far: <1-2 sentences>",
+    "Parts as '## ' headings, exactly: '## Part One — Before Class',",
+    "  '## Part Two — During Class', '## Part Three — After Class'.",
+    "All sub-sections as '### ' headings.",
+    "In Part One, put a '### Cue Colours Used in This Plan' heading on its own line",
+    "  (the app fills the colour key — do not list colours yourself).",
+    "Each in-class step as '### <minutes> min — <title>' then ONE line of teacher action.",
+    "The story as '### The Story — <title>', then 1-2 short paragraphs; reflective line",
+    "  in *italics*.",
+    "Any fun fact as a paragraph starting 'Did You Know? ...'.",
+    "The Google Classroom message under a '### Evening Post' heading.",
+    "",
+    "=== QUALITY BAR ===",
+    "- Learning Outcomes: 3-5, observable and measurable with a threshold",
+    "  (e.g. 'match 4 of 5 synonym pairs').",
+    "- Misconceptions: a 3-column, 3-row table — 'What the child says | Why it happens |",
+    "  What the teacher does' — every cell filled.",
     "- Assessment for Learning: tie each check to a specific Learning Outcome.",
-    "- Part Three must include a short closure/plenary and a quick exit ticket linked to the",
-    "  outcomes, then the Evening Post for Google Classroom.",
-    "- Make the minutes of the In-Class steps add up to the stated session length.",
+    "- Part Three: a short closure/plenary + an exit ticket linked to the outcomes.",
+    "- In-class step minutes must add up to the session length.",
     "",
-    "=== COMPLETENESS (most important) ===",
-    "The plan is only finished when it ends with Part Three - After Class AND a complete",
-    "Evening Post. NEVER stop inside the Story. Keep earlier sections tight so you always have",
-    "room to finish Part Three and the Evening Post.",
-    "Keep it comfortable to read and compact: short paragraphs, tight lists, no filler",
-    "and no empty padding. Output clean Markdown only (headings, lists, and the three-column",
-    "misconceptions table). No preamble, no sign-off."
+    "=== NON-NEGOTIABLE ===",
+    "The plan is complete ONLY when it ends with Part Three and a full Evening Post;",
+    "never stop inside the Story. Output clean Markdown only — short paragraphs, tight",
+    "lists, no preamble, no sign-off, no filler."
   ].join("\n");
 }
 
@@ -74,10 +66,7 @@ function userMessage(d) {
     "Grade: " + d.grade,
     "Subject: " + d.subject,
     "Total Sessions: " + d.sessions,
-    "Generate: Session " + d.sessionNo + " of " + d.sessions + ".",
-    "",
-    "The chapter pages are attached. Detect the chapter number and name from them,",
-    "then write the complete Session " + d.sessionNo + " plan now."
+    "Generate: Session " + d.sessionNo + " of " + d.sessions + ". The chapter pages are attached."
   ];
   if (d.prior && String(d.prior).trim()) {
     lines.push(
@@ -137,7 +126,9 @@ module.exports = async function (req, res) {
     // gemini-2.5-flash is a thinking model — reasoning tokens count against this
     // budget. 20000 was too low (the plan stopped mid-story). 40000 leaves ample
     // room for thinking + the full plan including Part Three and the Evening Post.
-    generationConfig: { temperature: 0.85, maxOutputTokens: 40000 }
+    // Lower temperature → steadier, more consistent plans run-to-run (the school
+    // wants reliable quality, not creative variance).
+    generationConfig: { temperature: 0.5, maxOutputTokens: 40000 }
   };
 
   var url = "https://generativelanguage.googleapis.com/v1beta/models/" +
