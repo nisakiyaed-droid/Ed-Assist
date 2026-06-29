@@ -19,113 +19,121 @@
     <span class="brand-tag">Lesson Plans for Teachers</span>
   </header>
 
-  <!-- HERO -->
-  <section class="hero">
-    <h1>Plan a whole chapter in minutes.</h1>
-    <p class="lead">
-      Answer five small questions and get complete, ready-to-teach session plans —
-      built for your grade, your subject, and your chapter, and with a story
-      your children will love.
-    </p>
-    <div class="hero-actions">
-      <a href="#start" class="btn primary">Start a chapter</a>
-      <a href="#sample" class="btn ghost">See a sample plan</a>
-    </div>
-    <p class="free-note">Free to use · Works with your school's Claude account</p>
-  </section>
+  <main>
+    <!-- HERO -->
+    <section class="hero">
+      <span class="eyebrow">🌱 For teachers · Free to use</span>
+      <h1>Plan a whole chapter in minutes.</h1>
+      <p class="lead">
+        Answer five small questions and get complete, ready-to-teach session plans —
+        built for your grade, your subject, and your chapter, and with a story
+        your children will love.
+      </p>
+      <div class="hero-actions">
+        <a href="#start" class="btn primary">Start a chapter</a>
+        <a href="#sample" class="btn ghost">See a sample plan</a>
+      </div>
+      <p class="free-note">Works with your school's Claude account</p>
+    </section>
 
-  <!-- HOW IT WORKS -->
-  <section class="how">
-    <h2>How it works</h2>
-    <div class="steps">
-      <div class="step-card"><span class="num">1</span><strong>Answer 5 questions</strong><span>Chapter number, name, grade, subject, and how many sessions.</span></div>
-      <div class="step-card"><span class="num">2</span><strong>Get your starter message</strong><span>The app writes a ready-to-paste message for Claude.</span></div>
-      <div class="step-card"><span class="num">3</span><strong>Add two files</strong><span>The Framework (download below) and your scanned chapter pages.</span></div>
-      <div class="step-card"><span class="num">4</span><strong>Get your plans</strong><span>Claude builds each session as you approve it — ready to teach.</span></div>
-    </div>
-  </section>
+    <!-- HOW IT WORKS -->
+    <section class="how">
+      <h2>How it works</h2>
+      <p class="section-sub">Four calm steps from a blank page to a plan you can teach.</p>
+      <div class="steps">
+        <div class="step-card"><span class="num">1</span><strong>Answer 5 questions</strong><span>Chapter number, name, grade, subject, and how many sessions.</span></div>
+        <div class="step-card"><span class="num">2</span><strong>Get your starter message</strong><span>The app writes a ready-to-paste message for Claude.</span></div>
+        <div class="step-card"><span class="num">3</span><strong>Add two files</strong><span>The Framework (download below) and your scanned chapter pages.</span></div>
+        <div class="step-card"><span class="num">4</span><strong>Get your plans</strong><span>Claude builds each session as you approve it — ready to teach.</span></div>
+      </div>
+    </section>
 
-  <!-- START FORM -->
-  <section class="start" id="start">
-    <div class="panel">
-      <h2>Start a chapter</h2>
-      <p class="subtle">Fill in the five small questions. Nothing is saved — this just builds your starter message.</p>
+    <!-- START FORM -->
+    <section class="start" id="start">
+      <div class="panel">
+        <h2 style="text-align:left">Start a chapter</h2>
+        <p class="subtle">Fill in the five small questions. Nothing is saved — this just builds your starter message.</p>
 
-      <form id="chapter-form" autocomplete="off">
-        <div class="field-row">
-          <label class="field">
-            <span class="field-label">Chapter number <span class="req">*</span></span>
-            <input type="text" id="chapterNo" placeholder="e.g. 7" required />
-          </label>
-          <label class="field">
-            <span class="field-label">Chapter name <span class="req">*</span></span>
-            <input type="text" id="chapterName" placeholder="e.g. Plants Around Us" required />
-          </label>
-        </div>
+        <form id="chapter-form" autocomplete="off" novalidate>
+          <div class="field-row">
+            <label class="field" id="field-chapterNo">
+              <span class="field-label">Chapter number <span class="req">*</span></span>
+              <input type="text" id="chapterNo" placeholder="e.g. 7" required aria-required="true" />
+              <span class="field-error">Please add a chapter number.</span>
+            </label>
+            <label class="field" id="field-chapterName">
+              <span class="field-label">Chapter name <span class="req">*</span></span>
+              <input type="text" id="chapterName" placeholder="e.g. Plants Around Us" required aria-required="true" />
+              <span class="field-error">Please add a chapter name.</span>
+            </label>
+          </div>
 
-        <div class="field-row">
-          <label class="field">
-            <span class="field-label">Grade</span>
-            <select id="grade">
-              <option value="Grade 1">Grade 1</option>
-              <option value="Grade 2">Grade 2</option>
-              <option value="Grade 3" selected>Grade 3</option>
-              <option value="Grade 4">Grade 4</option>
-              <option value="Grade 5">Grade 5</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="field-label">Subject</span>
-            <select id="subject">
-              <option>English</option>
-              <option>Mathematics</option>
-              <option selected>Environmental Studies</option>
-              <option>Social Studies</option>
-            </select>
-          </label>
-          <label class="field">
-            <span class="field-label">Total sessions</span>
-            <select id="sessions">
-              <option>1</option><option>2</option><option>3</option>
-              <option selected>4</option><option>5</option><option>6</option>
-              <option>7</option><option>8</option>
-            </select>
-          </label>
-        </div>
+          <div class="field-row three">
+            <label class="field">
+              <span class="field-label">Grade</span>
+              <select id="grade">
+                <option value="Grade 1">Grade 1</option>
+                <option value="Grade 2">Grade 2</option>
+                <option value="Grade 3" selected>Grade 3</option>
+                <option value="Grade 4">Grade 4</option>
+                <option value="Grade 5">Grade 5</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">Subject</span>
+              <select id="subject">
+                <option>English</option>
+                <option>Mathematics</option>
+                <option selected>Environmental Studies</option>
+                <option>Social Studies</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field-label">Total sessions</span>
+              <select id="sessions">
+                <option>1</option><option>2</option><option>3</option>
+                <option selected>4</option><option>5</option><option>6</option>
+                <option>7</option><option>8</option>
+              </select>
+            </label>
+          </div>
 
-        <button type="submit" class="btn primary full">Build my starter message</button>
-      </form>
+          <button type="submit" class="btn primary full" id="generate-btn">Build my starter message</button>
+        </form>
 
-      <!-- OUTPUT -->
-      <div id="result" class="result hidden">
-        <h3>Your starter message</h3>
-        <p class="subtle">Copy this and paste it into a new Claude chat. <strong>Before you send it, attach the two files below.</strong></p>
-        <pre id="starter" class="starter"></pre>
-        <div class="result-actions">
-          <button type="button" class="btn small primary" id="copyBtn">Copy message</button>
-          <a class="btn small ghost" id="frameworkLink" href="docs/framework/4-lesson-plan-framework-v1.1.md" download>Download the Framework</a>
-          <a class="btn small ghost" href="https://claude.ai" target="_blank" rel="noopener">Open Claude</a>
-        </div>
-        <div class="checklist">
-          <strong>Before you send, attach:</strong>
-          <ol>
-            <li>📄 <strong>The Framework</strong> — the file you just downloaded (the same one each chapter).</li>
-            <li>📚 <strong>Your chapter pages</strong> — a scan or photo of the chapter from your textbook.</li>
-          </ol>
+        <!-- OUTPUT -->
+        <div id="result" class="result hidden" aria-live="polite">
+          <h3>Your starter message</h3>
+          <p class="subtle">Copy this and paste it into a new Claude chat. <strong>Before you send it, attach the two files below.</strong></p>
+          <div class="starter-wrap">
+            <pre id="starter" class="starter"></pre>
+          </div>
+          <div class="result-actions">
+            <button type="button" class="btn small primary" id="copyBtn">Copy message</button>
+            <a class="btn small ghost" id="frameworkLink" href="docs/framework/4-lesson-plan-framework-v1.1.md" download>Download the Framework</a>
+            <a class="btn small ghost" href="https://claude.ai" target="_blank" rel="noopener">Open Claude</a>
+          </div>
+          <div class="checklist">
+            <strong>Before you send, attach:</strong>
+            <ol>
+              <li>📄 <strong>The Framework</strong> — the file you just downloaded (the same one each chapter).</li>
+              <li>📚 <strong>Your chapter pages</strong> — a scan or photo of the chapter from your textbook.</li>
+            </ol>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- SAMPLE -->
-  <section class="sample" id="sample">
-    <h2>See a sample plan</h2>
-    <p class="subtle center">This is a real session plan made by the system — colors, story, and all.</p>
-    <a class="sample-frame" href="docs/preview/session-plan-preview.html" target="_blank" rel="noopener">
-      <img src="docs/preview/session-plan-preview.png" alt="A sample session plan, fully colored" />
-      <span class="sample-open">Open the full sample ↗</span>
-    </a>
-  </section>
+    <!-- SAMPLE -->
+    <section class="sample" id="sample">
+      <h2>See a sample plan</h2>
+      <p class="section-sub">A real session plan made by the system — colors, story, and all.</p>
+      <a class="sample-frame" href="docs/preview/session-plan-preview.html" target="_blank" rel="noopener">
+        <img src="docs/preview/session-plan-preview.png" alt="A sample session plan, fully colored" />
+        <span class="sample-open">Open the full sample ↗</span>
+      </a>
+    </section>
+  </main>
 
   <footer class="site-footer">
     <span>Ed-Assist · Lesson Plans for Teachers · Version 1</span>

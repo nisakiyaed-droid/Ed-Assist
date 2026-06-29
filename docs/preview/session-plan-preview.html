@@ -3,84 +3,125 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Session Plan — colored preview</title>
+<title>Session Plan — Plants Around Us · Session 1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,500;1,500&display=swap" rel="stylesheet" />
 <style>
-  /* ---- Palette (matches the House Style guide) ---- */
   :root{
-    --ink:#1F2430; --soft:#5A6480; --line:#D8DEE9; --softbg:#F7F9FC;
+    --ink:#1b2230; --ink-2:#39425a; --soft:#5e6880; --faint:#8b93a7;
+    --line:#e7eaf1; --softbg:#f6f7fb;
     --green:#2E7D32; --blue:#1565C0; --purple:#6A1B9A; --orange:#E65100; --teal:#00796B;
-    --p1bg:#E8F0FE; --p2bg:#E7F5E9; --p3bg:#F3E9F8;
+    --p1bg:#eaf1fd; --p2bg:#e9f4ea; --p3bg:#f4ecf9;
+    --shadow:0 18px 44px rgba(16,24,40,.10), 0 4px 12px rgba(16,24,40,.05);
+    --r:13px; --r-sm:9px; --pill:999px;
   }
   *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
   body{
-    margin:0; background:#e9edf4; color:var(--ink);
-    font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;
-    line-height:1.5; font-size:15px;
-  }
-  /* A4-ish sheet */
-  .sheet{
-    background:#fff; max-width:820px; margin:24px auto; padding:40px 46px;
-    box-shadow:0 8px 30px rgba(0,0,0,.12); border-radius:6px;
-  }
-  .doc-title{font-size:24px; font-weight:800; margin:0 0 2px; letter-spacing:-.01em;}
-  .doc-sub{color:var(--soft); font-size:13px; margin:0 0 18px;}
-  .progress{
-    background:var(--softbg); border:1px solid var(--line); border-left:4px solid var(--blue);
-    border-radius:8px; padding:10px 14px; font-size:13.5px; color:var(--soft); margin:0 0 22px;
+    margin:0; background:#eef1f7; color:var(--ink);
+    font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    line-height:1.6; font-size:15.5px; -webkit-font-smoothing:antialiased;
   }
 
+  .sheet{
+    background:#fff; max-width:820px; margin:clamp(14px,3vw,28px) auto;
+    padding:clamp(22px,5vw,46px); box-shadow:var(--shadow); border-radius:14px;
+  }
+  .doc-title{font-size:clamp(21px,3.4vw,26px); font-weight:800; letter-spacing:-.02em; margin:0 0 4px;}
+  .doc-sub{color:var(--soft); font-size:13.5px; margin:0 0 18px;}
+
+  .progress{
+    background:var(--p1bg); border:1px solid #d6e3fb; border-left:4px solid var(--blue);
+    border-radius:var(--r-sm); padding:12px 15px; font-size:14px; color:var(--ink-2); margin:0 0 24px;
+  }
+  .progress b{color:var(--blue);}
+
   /* Part banners */
-  .part{border-radius:9px; padding:9px 14px; font-weight:700; font-size:15px; margin:26px 0 14px;
-        display:flex; align-items:center; gap:9px;}
+  .part{
+    border-radius:var(--r-sm); padding:12px 16px; font-weight:700; font-size:15.5px;
+    margin:30px 0 16px; display:flex; align-items:center; gap:10px; letter-spacing:-.01em;
+  }
   .part-1{background:var(--p1bg); color:var(--blue);}
   .part-2{background:var(--p2bg); color:var(--green);}
   .part-3{background:var(--p3bg); color:var(--purple);}
-  .part .ico{font-size:16px;}
+  .part .ico{font-size:17px;}
 
-  h3{font-size:14px; text-transform:uppercase; letter-spacing:.04em; color:var(--soft); margin:18px 0 7px;}
-  ul,ol{margin:6px 0 6px; padding-left:22px;} li{margin:4px 0;}
-  p{margin:7px 0;}
+  h3{font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:var(--faint);
+     font-weight:700; margin:22px 0 9px;}
+  ul,ol{margin:8px 0; padding-left:22px;} li{margin:6px 0;}
+  p{margin:8px 0;}
 
   /* Cue chips */
-  .cue{display:inline-block; font-size:12px; font-weight:700; padding:2px 9px; border-radius:999px; color:#fff;}
+  .cues{display:flex; flex-wrap:wrap; gap:7px;}
+  .cue{font-size:12px; font-weight:700; padding:4px 11px; border-radius:var(--pill); color:#fff;}
   .c-green{background:var(--green);} .c-blue{background:var(--blue);}
   .c-purple{background:var(--purple);} .c-orange{background:var(--orange);} .c-teal{background:var(--teal);}
 
-  /* Timeline */
-  .step{display:grid; grid-template-columns:64px 1fr; gap:12px; align-items:start;
-        padding:9px 12px; border:1px solid var(--line); border-radius:8px; margin:7px 0; background:#fff;}
-  .step .t{font-weight:700; font-size:12.5px; color:var(--green); background:var(--p2bg);
-           border-radius:7px; padding:3px 6px; text-align:center;}
-  .step b{display:block;} .step small{color:var(--soft);}
+  /* Timeline — prominent timing, scannable titles, generous whitespace */
+  .timeline{display:flex; flex-direction:column; gap:9px;}
+  .step{
+    display:grid; grid-template-columns:72px 1fr; gap:14px; align-items:start;
+    padding:13px 15px; border:1px solid var(--line); border-radius:var(--r); background:#fff;
+  }
+  .step .t{
+    font-weight:800; font-size:13px; color:var(--green); background:var(--p2bg);
+    border-radius:var(--pill); padding:6px 6px; text-align:center; white-space:nowrap;
+  }
+  .step b{display:block; font-size:15.5px; letter-spacing:-.01em; margin-bottom:2px;}
+  .step small{color:var(--soft); font-size:14px; line-height:1.5;}
 
-  /* Story block (purple) */
-  .story{border:1px solid #e3d3ef; border-left:4px solid var(--purple); background:#faf6fd;
-         border-radius:9px; padding:14px 16px; margin:10px 0;}
-  .story .label{color:var(--purple); font-weight:700; font-size:13px; margin-bottom:6px;}
-  .story p{font-size:15.5px;}
+  /* Story — warm, readable, not documentation */
+  .story{
+    border:1px solid #ead9f4; border-left:4px solid var(--purple); background:#fbf7fe;
+    border-radius:var(--r); padding:18px 20px; margin:14px 0;
+  }
+  .story .label{color:var(--purple); font-weight:700; font-size:13px; margin-bottom:8px; letter-spacing:.01em;}
+  .story p{font-family:"Lora",Georgia,"Times New Roman",serif; font-size:16.5px; line-height:1.74; color:#2a2330;}
+  .story p i{color:var(--purple);}
 
   /* Did You Know (orange) */
-  .dyk{border:1px solid #f3d9c2; border-left:4px solid var(--orange); background:#fff6ef;
-       border-radius:9px; padding:11px 14px; margin:10px 0; font-size:14px;}
+  .dyk{border:1px solid #f4dcc4; border-left:4px solid var(--orange); background:#fff7ef;
+       border-radius:var(--r); padding:13px 16px; margin:12px 0; font-size:14.5px;}
   .dyk .label{color:var(--orange); font-weight:700; font-size:13px;}
 
   /* Cross-curricular (teal) */
   .xc{border:1px solid #c7e6e1; border-left:4px solid var(--teal); background:#f0faf8;
-      border-radius:9px; padding:11px 14px; margin:10px 0; font-size:14px;}
+      border-radius:var(--r); padding:13px 16px; margin:12px 0; font-size:14.5px;}
   .xc .label{color:var(--teal); font-weight:700; font-size:13px;}
 
   /* Evening post */
-  .post{border:1px solid var(--line); border-radius:9px; padding:14px 16px; background:var(--softbg); margin:8px 0;}
+  .post{border:1px solid var(--line); border-radius:var(--r); padding:16px 18px; background:var(--softbg); margin:10px 0;}
+  .post p{margin:10px 0;}
 
-  table{border-collapse:collapse; width:100%; font-size:13.5px; margin:8px 0;}
-  th,td{border:1px solid var(--line); padding:7px 9px; text-align:left;} th{background:var(--softbg);}
+  /* Misconceptions — table on wide, cards on mobile */
+  .mis{width:100%; border-collapse:separate; border-spacing:0; font-size:14px; margin:10px 0;
+       border:1px solid var(--line); border-radius:var(--r); overflow:hidden;}
+  .mis th,.mis td{padding:11px 13px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line);}
+  .mis th{background:var(--softbg); font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--soft);}
+  .mis tr:last-child td{border-bottom:none;}
+  .mis td:first-child{font-weight:600; color:var(--ink);}
 
-  .foot{margin-top:26px; padding-top:12px; border-top:1px solid var(--line);
-        color:var(--soft); font-size:12px; display:flex; justify-content:space-between;}
+  @media (max-width:600px){
+    .mis, .mis tbody, .mis tr, .mis td{display:block; width:100%;}
+    .mis thead{position:absolute; clip:rect(0 0 0 0); height:1px; width:1px; overflow:hidden;}
+    .mis{border:none;}
+    .mis tr{border:1px solid var(--line); border-radius:var(--r); margin-bottom:12px; padding:6px 4px; background:#fff;}
+    .mis td{border:none; padding:8px 14px;}
+    .mis td::before{
+      content:attr(data-label); display:block; font-size:11px; text-transform:uppercase;
+      letter-spacing:.06em; color:var(--faint); font-weight:700; margin-bottom:3px;
+    }
+    .mis td:first-child{color:var(--purple);}
+  }
 
-  .note{max-width:820px; margin:18px auto 0; color:#5A6480; font-size:13px; text-align:center;}
+  .foot{margin-top:30px; padding-top:14px; border-top:1px solid var(--line);
+        color:var(--faint); font-size:12px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+
+  .note{max-width:820px; margin:16px auto 36px; color:var(--soft); font-size:13px; text-align:center; padding-inline:20px;}
+
   @media print{
-    body{background:#fff;} .sheet{box-shadow:none; margin:0; max-width:none; border-radius:0;}
+    body{background:#fff;} .sheet{box-shadow:none; margin:0; max-width:none; border-radius:0; padding:0;}
     .note{display:none;}
   }
 </style>
@@ -106,32 +147,50 @@
   </ol>
 
   <h3>Cue colors used in this plan</h3>
-  <p>
+  <div class="cues">
     <span class="cue c-green">Concept</span>
     <span class="cue c-blue">New word</span>
     <span class="cue c-purple">Story</span>
     <span class="cue c-orange">Amazing fact</span>
     <span class="cue c-teal">Cross-curricular</span>
-  </p>
+  </div>
 
   <h3>Anticipated Misconceptions (three)</h3>
-  <table>
-    <tr><th>Child says</th><th>Why</th><th>Teacher does</th></tr>
-    <tr><td>"The roots are dirty, they do nothing."</td><td>Roots are hidden.</td><td>Show roots drinking in a clear glass of water.</td></tr>
-    <tr><td>"Only the flower matters."</td><td>Flowers are bright.</td><td>Cover the flower, then the leaves — ask if the plant can still live.</td></tr>
-    <tr><td>"The stem is just a stick."</td><td>It looks plain.</td><td>Trace the water's path up the stem with a finger.</td></tr>
+  <table class="mis">
+    <thead>
+      <tr><th>Child says</th><th>Why</th><th>Teacher does</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td data-label="Child says">"The roots are dirty, they do nothing."</td>
+        <td data-label="Why">Roots are hidden.</td>
+        <td data-label="Teacher does">Show roots drinking in a clear glass of water.</td>
+      </tr>
+      <tr>
+        <td data-label="Child says">"Only the flower matters."</td>
+        <td data-label="Why">Flowers are bright.</td>
+        <td data-label="Teacher does">Cover the flower, then the leaves — ask if the plant can still live.</td>
+      </tr>
+      <tr>
+        <td data-label="Child says">"The stem is just a stick."</td>
+        <td data-label="Why">It looks plain.</td>
+        <td data-label="Teacher does">Trace the water's path up the stem with a finger.</td>
+      </tr>
+    </tbody>
   </table>
 
   <!-- PART TWO -->
   <div class="part part-2"><span class="ico">🍎</span> Part Two — During Class · Enhanced (~35 min)</div>
 
-  <div class="step"><div class="t">3 min</div><div><b>Prior Knowledge Activation</b><small>Hold up the plant. "Is it living? How do you know?"</small></div></div>
-  <div class="step"><div class="t">3 min</div><div><b>Hook</b><small>"This plant is drinking water right now — and you can see it."</small></div></div>
-  <div class="step"><div class="t">8 min</div><div><b>Teach the Concept</b><small>Name each part and its job: root, stem, leaf, flower, fruit.</small></div></div>
-  <div class="step"><div class="t">6 min</div><div><b>Class Activity</b><small>Pairs point to and name a part on the real plant.</small></div></div>
-  <div class="step"><div class="t">5 min</div><div><b>Assessment for Learning</b><small>Written, oral, and physical (order the picture cards).</small></div></div>
-  <div class="step"><div class="t">7 min</div><div><b>The Story</b><small>Read "Meena and Paati's Garden" (below).</small></div></div>
-  <div class="step"><div class="t">3 min</div><div><b>Takeaway</b><small>Children finish: "Today I learned that a plant has…"</small></div></div>
+  <div class="timeline">
+    <div class="step"><div class="t">3 min</div><div><b>Prior Knowledge Activation</b><small>Hold up the plant. "Is it living? How do you know?"</small></div></div>
+    <div class="step"><div class="t">3 min</div><div><b>Hook</b><small>"This plant is drinking water right now — and you can see it."</small></div></div>
+    <div class="step"><div class="t">8 min</div><div><b>Teach the Concept</b><small>Name each part and its job: root, stem, leaf, flower, fruit.</small></div></div>
+    <div class="step"><div class="t">6 min</div><div><b>Class Activity</b><small>Pairs point to and name a part on the real plant.</small></div></div>
+    <div class="step"><div class="t">5 min</div><div><b>Assessment for Learning</b><small>Written, oral, and physical (order the picture cards).</small></div></div>
+    <div class="step"><div class="t">7 min</div><div><b>The Story</b><small>Read "Meena and Paati's Garden" (below).</small></div></div>
+    <div class="step"><div class="t">3 min</div><div><b>Takeaway</b><small>Children finish: "Today I learned that a plant has…"</small></div></div>
+  </div>
 
   <div class="story">
     <div class="label">📖 The Story · Meena and Paati's Garden</div>

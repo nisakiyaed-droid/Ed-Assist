@@ -29,12 +29,23 @@
     ].join("\n");
   }
 
+  // Toggle the .invalid state on a field wrapper and return whether it's valid.
+  function check(inputId, fieldId) {
+    var ok = el(inputId).value.trim() !== "";
+    el(fieldId).classList.toggle("invalid", !ok);
+    return ok;
+  }
+
   function handleSubmit(e) {
     e.preventDefault();
     var chapterNo = el("chapterNo").value.trim();
     var chapterName = el("chapterName").value.trim();
-    if (!chapterNo) { el("chapterNo").focus(); return; }
-    if (!chapterName) { el("chapterName").focus(); return; }
+
+    // Validate required fields, showing inline errors and focusing the first gap.
+    var noOk = check("chapterNo", "field-chapterNo");
+    var nameOk = check("chapterName", "field-chapterName");
+    if (!noOk) { el("chapterNo").focus(); return; }
+    if (!nameOk) { el("chapterName").focus(); return; }
 
     var data = {
       chapterNo: chapterNo,
@@ -62,5 +73,11 @@
   document.addEventListener("DOMContentLoaded", function () {
     el("chapter-form").addEventListener("submit", handleSubmit);
     el("copyBtn").addEventListener("click", copyStarter);
+    // Clear an error as soon as the teacher starts fixing it.
+    [["chapterNo", "field-chapterNo"], ["chapterName", "field-chapterName"]].forEach(function (p) {
+      el(p[0]).addEventListener("input", function () {
+        if (el(p[0]).value.trim() !== "") el(p[1]).classList.remove("invalid");
+      });
+    });
   });
 })();
