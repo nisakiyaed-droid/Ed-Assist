@@ -191,6 +191,14 @@
   function cells(line) {
     return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(function (c) { return c.trim(); });
   }
+  // Fixed cue-colour key (matches the house-style sample).
+  var CUE_LEGEND = '<div class="cues">' +
+    '<span class="cue c-green">Concept</span>' +
+    '<span class="cue c-blue">New word</span>' +
+    '<span class="cue c-purple">Story</span>' +
+    '<span class="cue c-orange">Amazing fact</span>' +
+    '<span class="cue c-teal">Cross-curricular</span>' +
+    "</div>";
   // Map a Part heading to its colour + icon (house style).
   function partKind(t) {
     if (/^part\s*one\b/i.test(t) || /before\s+class/i.test(t)) return { n: 1, ico: "📋" };
@@ -238,6 +246,11 @@
           out.push('<div class="step"><div class="t">' + esc(sm[1]) + ' min</div><div><span class="b">' + inline(sm[2]) + "</span>" +
             (desc.length ? '<span class="d">' + inline(desc.join(" ")) + "</span>" : "") + "</div></div>");
           continue;
+        }
+        // Cue-colour legend (the app supplies the coloured key)
+        if (lv >= 3 && /cue\s*colou?rs/i.test(txt)) {
+          out.push("<h3>" + inline(txt) + "</h3>" + CUE_LEGEND);
+          i++; continue;
         }
         // Story box (warm serif)
         if (lv >= 2 && /^(the\s+)?story\b/i.test(txt)) {
@@ -327,6 +340,29 @@
     wrap.innerHTML = head + body;
     return wrap;
   }
+  // Draw a thin footer on every page: school · chapter on the left, version ·
+  // date · page number on the right (house-style requirement).
+  function addFooters(pdf) {
+    try {
+      var total = pdf.internal.getNumberOfPages();
+      var w = pdf.internal.pageSize.getWidth();
+      var h = pdf.internal.pageSize.getHeight();
+      var months = ["January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"];
+      var dt = new Date();
+      var dateStr = months[dt.getMonth()] + " " + dt.getFullYear();
+      var left = "Dr. Dasarathan International School · " + planTitleText;
+      if (left.length > 72) left = left.slice(0, 71) + "…";
+      for (var p = 1; p <= total; p++) {
+        pdf.setPage(p);
+        pdf.setDrawColor(225, 228, 235); pdf.setLineWidth(0.2);
+        pdf.line(10, h - 9, w - 10, h - 9);
+        pdf.setFont("helvetica", "normal"); pdf.setFontSize(8); pdf.setTextColor(150, 150, 150);
+        pdf.text(left, 10, h - 5);
+        pdf.text("Framework v1.1 · " + dateStr + "  ·  Page " + p + " of " + total, w - 10, h - 5, { align: "right" });
+      }
+    } catch (e) { /* footer is non-critical — never block the download */ }
+  }
   function makePdfWorker() {
     // html2canvas only captures elements in NORMAL document flow (fixed/absolute/
     // off-screen render blank) AND mis-places the capture when the target sits in
@@ -353,7 +389,9 @@
       jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       pagebreak: { mode: ["css", "legacy"] }
     };
-    var worker = window.html2pdf().set(opt).from(element);
+    // Render to the jsPDF instance, stamp footers on every page, then the caller
+    // continues with .save() / .outputPdf("blob").
+    var worker = window.html2pdf().set(opt).from(element).toPdf().get("pdf").then(addFooters);
     return { worker: worker, cleanup: function () {
       if (element.parentNode) document.body.removeChild(element);
       if (cover.parentNode) document.body.removeChild(cover);

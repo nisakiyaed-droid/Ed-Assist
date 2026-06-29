@@ -28,6 +28,8 @@ function addendum(d) {
     "    '## Part Three — After Class'",
     "- For every smaller section (Learning Outcomes, Anticipated Misconceptions, etc.)",
     "  use a '### ' heading.",
+    "- Early in Part One, add a '### Cue Colours Used in This Plan' heading on its own",
+    "  (the app prints the coloured key automatically — do not list the colours yourself).",
     "- Write each In-Class teaching step as a '### ' heading in this shape:",
     "    '### <minutes> min — <Step title>'   (e.g. '### 3 min — Hook')",
     "  then ONE short line describing what the teacher does.",
