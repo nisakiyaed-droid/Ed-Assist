@@ -5,11 +5,32 @@
 
 var FRAMEWORK = require("./framework.js");
 
+// Grade 1→5 depth ladder (PRD §4): the kind of thinking, story shape, and
+// questioning style rise with the grade. Returns plain-language guidance lines.
+function gradeGuidance(grade) {
+  var g = parseInt((String(grade).match(/\d+/) || [])[0], 10) || 3;
+  var verbs = {
+    1: "identify, name, match, point to, sort — simple recognition and naming",
+    2: "describe, group, compare in simple ways, recall — explaining in their own words",
+    3: "explain, classify, demonstrate, organise, use — understanding how and why",
+    4: "compare and contrast, apply, arrange, infer — using knowledge in new situations",
+    5: "differentiate, justify, evaluate, construct, conclude — reasoning, judging, creating"
+  }[g] || "age-appropriate thinking";
+  var story = g <= 2 ? "a warm, simple narrative with one clear character and an everyday situation; short sentences, gentle events"
+    : g === 3 ? "a fuller narrative with a small problem to solve and a little cause and effect"
+    : "a real-world scenario the character reasons through, with choices, consequences, and a problem that needs the chapter's ideas to solve";
+  var quest = g <= 2 ? "closed questions with picture or object prompts (e.g. 'Point to the root')"
+    : g <= 4 ? "questions with thinking time, and think-pair-share"
+    : "open, probing questions that ask children to give reasons and weigh ideas (Socratic style)";
+  return { verbs: verbs, story: story, quest: quest };
+}
+
 // App-specific overlay on the Framework above. Adds only the output format,
 // the hard constraints, and faithfulness — it does NOT re-explain the pedagogy
 // the Framework already defines.
 function addendum(d) {
   var session = "Session " + d.sessionNo + " of " + d.sessions;
+  var grade = gradeGuidance(d.grade);
   return [
     "",
     "=== TASK ===",
@@ -21,14 +42,24 @@ function addendum(d) {
     "Draw every activity, example, word, story detail, and question from the ATTACHED",
     "chapter only. Do not add facts, characters, or content the chapter does not support.",
     "",
-    "=== GRADE ===",
+    "=== GRADE & DEPTH (this plan is " + d.grade + ") ===",
     "Pitch everything at " + d.grade + ". Wherever the text names a grade it must say",
     "'" + d.grade + "' — never another grade.",
+    "- Learning-outcome thinking for this grade: " + grade.verbs + ".",
+    "- Story shape for this grade: " + grade.story + ".",
+    "- Questioning style for this grade: " + grade.quest + ".",
+    "- For Maths, use only the number range and operations the chapter shows; never go",
+    "  beyond what the chapter itself contains.",
     "",
     "=== SCOPE ===",
     "Teach 1-2 focal skills this session. Across the " + d.sessions + " sessions, spread the",
     "chapter's skills so each has a clear focus; treat earlier-covered content as quick",
     "review and never repeat what an earlier session already taught.",
+    "",
+    "=== VOCABULARY (carry words across the chapter) ===",
+    "Show new words under a '### Today\\'s New Words' heading. From Session 2 onward also",
+    "add a '### Words We Already Know' heading listing key words from earlier sessions, so",
+    "earlier vocabulary stays alive instead of fading.",
     "",
     "=== OUTPUT FORMAT (exact markers — the app colour-codes them) ===",
     "Line 1:  # Chapter <number>: <name> — " + session,
@@ -115,7 +146,7 @@ async function callGemini(key, model, d, extraInstruction) {
     // reliably finishes in ~30s, while maxOutputTokens 20000 still leaves ~14k for
     // the full plan (thinking is capped, so it no longer crowds out the output and
     // causes truncation). Lower temperature → steadier, more consistent plans.
-    generationConfig: { temperature: 0.5, maxOutputTokens: 20000, thinkingConfig: { thinkingBudget: 6000 } }
+    generationConfig: { temperature: 0.5, maxOutputTokens: 16000, thinkingConfig: { thinkingBudget: 6000 } }
   };
 
   var url = "https://generativelanguage.googleapis.com/v1beta/models/" +
@@ -139,8 +170,17 @@ async function callGemini(key, model, d, extraInstruction) {
       return { ok: true, status: gres.status, text: "", finishReason: null, errorMessage: null, blockReason: json.promptFeedback.blockReason };
     }
     var cand = json && json.candidates && json.candidates[0];
+    // Join only the answer parts (defensively skip any "thought" parts so a
+    // model's reasoning can never bleed into the plan text).
     var text = cand && cand.content && cand.content.parts
-      ? cand.content.parts.map(function (p) { return p.text || ""; }).join("") : "";
+      ? cand.content.parts.filter(function (p) { return !p.thought; }).map(function (p) { return p.text || ""; }).join("") : "";
+    // Degenerate-loop safety AT THE SOURCE: a normal one-session plan is ~12-14k
+    // chars. If the model ran away (seen intermittently at 200k-400k chars), do
+    // NOT return the giant string — it would make a huge broken PDF. Fail cleanly
+    // so the handler surfaces a friendly "Make again".
+    if (text.length > 30000) {
+      return { ok: false, status: gres.status, text: "", finishReason: cand && cand.finishReason, errorMessage: "The plan came out garbled. Please tap \"Make again\".", blockReason: null };
+    }
     return { ok: true, status: gres.status, text: text, finishReason: cand && cand.finishReason, errorMessage: null, blockReason: null };
   } catch (err) {
     return { ok: false, status: 0, text: "", finishReason: null, errorMessage: "Couldn't reach Google to write the plan. Please try again in a moment.", blockReason: null };
@@ -257,10 +297,10 @@ module.exports = async function (req, res) {
 
   var draft = (first.text || "").trim();
 
-  // Guard against a rare degenerate run where the model loops and emits tens of
-  // thousands of characters. A normal one-session plan is ~12k chars; shipping a
-  // huge one makes a giant broken PDF, so treat it as no usable plan.
-  if (draft.length > 40000) {
+  // Guard against a rare degenerate run where the model loops. A normal one-
+  // session plan is ~12-14k chars, so anything past 28k is runaway garbage —
+  // shipping it makes a giant broken PDF, so treat it as no usable plan.
+  if (draft.length > 28000) {
     res.status(502).json({ error: "The plan came out garbled. Please tap \"Make again\"." });
     return;
   }
