@@ -318,10 +318,27 @@ input[type="file"]:hover{border-color:var(--brand);}
 .plan-meta{list-style:disc; margin:6px 0 0; padding:0 0 0 18px; color:var(--soft); font-size:14px;}
 .plan-meta li{margin:2px 0;}
 .plan-meta:empty{display:none;}
-.toolbar-actions{display:flex; gap:8px;}
-/* Keep Download / Share / Print completely away until generation is finished.
-   Two-class selector so it always beats the plain .toolbar-actions display. */
-.toolbar-actions.hidden{display:none !important;}
+/* Chapter folder — the list of downloadable / shareable files. Kept fully out
+   of the way until generation finishes (two-class selector beats .plan-files). */
+.plan-files{margin:0 0 18px;}
+.plan-files.hidden{display:none !important;}
+.files-head{font-size:13px; font-weight:700; letter-spacing:.03em; text-transform:uppercase;
+  color:var(--soft); margin:0 0 10px;}
+.files-list{display:flex; flex-direction:column; gap:10px;}
+.file-row{display:flex; align-items:center; justify-content:space-between; gap:12px;
+  background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-sm);
+  padding:12px 14px;}
+.file-info{display:flex; align-items:center; gap:12px; min-width:0;}
+.file-ico{font-size:22px; line-height:1; flex:none;}
+.file-text{display:flex; flex-direction:column; min-width:0;}
+.file-name{font-weight:700; color:var(--ink); font-size:15px;}
+.file-sub{color:var(--soft); font-size:12.5px; margin-top:1px;}
+.file-acts{display:flex; gap:8px; flex:none;}
+.btn.regen{margin-top:14px;}
+@media(max-width:560px){
+  .file-row{flex-direction:column; align-items:stretch;}
+  .file-acts{justify-content:flex-end;}
+}
 
 /* Progress bar shown WHILE sessions are being written (the plan itself stays
    hidden until every session is done). */
@@ -567,7 +584,7 @@ body.gated{overflow:hidden;}
 /* Print: just the plan, tight */
 @media print{
   .login-gate, .site-header, .hero, .how, form, .sample, .site-footer,
-  .output-toolbar .toolbar-actions, .gen-status, .trunc-note, .ai-note{display:none !important;}
+  .plan-files, .gen-status, .trunc-note, .ai-note{display:none !important;}
   .panel{box-shadow:none; border:none; padding:0;}
   .result.hidden{display:none;}
   .output-toolbar{border:none; margin-bottom:8px;}

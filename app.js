@@ -69,7 +69,7 @@
     s.textContent = text;
     s.classList.remove("hidden");
   }
-  function showToolbar(on) { el("toolbarActions").classList.toggle("hidden", !on); }
+  function showToolbar(on) { el("planFiles").classList.toggle("hidden", !on); }
   function setMeta(items) {
     el("planMeta").innerHTML = items.map(function (x) {
       return "<li>" + String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</li>";
@@ -293,6 +293,7 @@
     var N = parseInt(el("sessions").value, 10) || currentSessions.length;
     el("planTitle").textContent = planTitleText;
     setMeta([el("grade").value, el("subject").value, currentSessions.length + " of " + N + " session" + (N > 1 ? "s" : "")]);
+    buildFolder();   // assemble the downloadable / shareable file list
   }
 
   // ---- Safe Markdown renderer (no external dependency) ------------------
@@ -440,11 +441,60 @@
   }
 
   // ---- PDF (real file) --------------------------------------------------
-  function pdfFilename() {
-    var t = planTitleText.replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").slice(0, 60) || "lesson-plan";
-    return "DDIS-" + t + ".pdf";
+  // Every downloadable/shareable file is a "doc": { title, sections:[md…],
+  // hint, shareText }. The same machinery builds the complete plan, the Chapter
+  // Summary, and each Evening Post — only the title and section list differ.
+  function safeName(s) {
+    return String(s).replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").slice(0, 60) || "lesson-plan";
   }
-  function buildPdfElement() {
+  function pdfFilename(doc) { return "DDIS-" + safeName(doc && (doc.hint || doc.title)) + ".pdf"; }
+
+  // Pull the standalone "### Evening Post" section out of a session's markdown,
+  // so it can become its own parent-ready file. Returns "" if none is present.
+  function extractEveningPost(md) {
+    var lines = String(md).replace(/\r\n/g, "\n").split("\n");
+    var s = -1;
+    for (var i = 0; i < lines.length; i++) {
+      if (/^###\s+evening\s+post/i.test(lines[i].trim())) { s = i; break; }
+    }
+    if (s < 0) return "";
+    var buf = [lines[s]];
+    for (var j = s + 1; j < lines.length; j++) {
+      if (/^#{1,3}\s+/.test(lines[j])) break;   // next #/##/### heading closes it
+      buf.push(lines[j]);
+    }
+    return buf.join("\n").trim();
+  }
+
+  // Doc builders -----------------------------------------------------------
+  function fullDoc() {
+    return {
+      title: planTitleText,
+      sections: currentSessions.concat(summaryMarkdown ? [summaryMarkdown] : []),
+      hint: planTitleText,
+      shareText: planTitleText + " — lesson plan from Dr. Dasarathan International School."
+    };
+  }
+  function summaryDoc() {
+    return {
+      title: planTitleText + " — Chapter Summary",
+      sections: [summaryMarkdown],
+      hint: planTitleText + " Chapter Summary",
+      shareText: planTitleText + " — Chapter Summary (Dr. Dasarathan International School)."
+    };
+  }
+  function eveningDoc(i, ep) {
+    var k = i + 1;
+    return {
+      title: planTitleText + " — Evening Post (Session " + k + ")",
+      sections: [ep],
+      hint: planTitleText + " Evening Post S" + k,
+      shareText: "Today's class update — " + planTitleText + " (Session " + k + "), " +
+        "Dr. Dasarathan International School."
+    };
+  }
+
+  function buildPdfElement(doc) {
     var wrap = document.createElement("div");
     wrap.className = "pdf-doc";
     // Text-only header (no <img>) — keeps html2canvas from rendering a blank page
@@ -453,20 +503,18 @@
       '<div class="pdf-head">' +
         '<div class="pdf-school">Dr. Dasarathan International School</div>' +
         '<div class="pdf-motto">Inspire… Explore… Excel… · ICSE, Coimbatore</div>' +
-        '<div class="pdf-plan">' + esc(planTitleText) + '</div>' +
+        '<div class="pdf-plan">' + esc(doc.title) + '</div>' +
       '</div>';
-    var body = currentSessions.map(function (md) {
-      return '<section class="plan-session"><div class="rendered">' + mdToHtml(md) + '</div></section>';
+    var body = doc.sections.map(function (md, idx) {
+      var cls = "plan-session" + (idx > 0 ? " plan-summary" : ""); // page-break before extra sections
+      return '<section class="' + cls + '"><div class="rendered">' + mdToHtml(md) + '</div></section>';
     }).join("");
-    if (summaryMarkdown) {
-      body += '<section class="plan-session plan-summary"><div class="rendered">' + mdToHtml(summaryMarkdown) + '</div></section>';
-    }
     wrap.innerHTML = head + body;
     return wrap;
   }
-  // Draw a thin footer on every page: school · chapter on the left, version ·
+  // Draw a thin footer on every page: school · title on the left, version ·
   // date · page number on the right (house-style requirement).
-  function addFooters(pdf) {
+  function addFooters(pdf, title) {
     try {
       var total = pdf.internal.getNumberOfPages();
       var w = pdf.internal.pageSize.getWidth();
@@ -475,7 +523,7 @@
         "July", "August", "September", "October", "November", "December"];
       var dt = new Date();
       var dateStr = months[dt.getMonth()] + " " + dt.getFullYear();
-      var left = "Dr. Dasarathan International School · " + planTitleText;
+      var left = "Dr. Dasarathan International School · " + title;
       if (left.length > 72) left = left.slice(0, 71) + "…";
       for (var p = 1; p <= total; p++) {
         pdf.setPage(p);
@@ -487,7 +535,7 @@
       }
     } catch (e) { /* footer is non-critical — never block the download */ }
   }
-  function makePdfWorker() {
+  function makePdfWorker(doc) {
     // html2canvas only captures elements in NORMAL document flow (fixed/absolute/
     // off-screen render blank) AND mis-places the capture when the target sits in
     // a flex/centered parent (clipped edges + top gap). So the plan is a plain
@@ -495,9 +543,9 @@
     // overlay on top — never the plan's parent.
     var cover = document.createElement("div");
     cover.className = "pdf-stage";
-    cover.innerHTML = '<div class="pdf-stage-msg">Preparing your PDF…</div>';
+    cover.innerHTML = '<div class="pdf-stage-msg">Preparing your file…</div>';
     document.body.appendChild(cover);
-    var element = buildPdfElement();
+    var element = buildPdfElement(doc);
     // Mount at the very TOP of the document and scroll to origin: when the
     // captured element sits far down a long page, html2canvas leaks its offset
     // into the canvas as a big blank top margin. Prepending + scroll(0,0) keeps
@@ -507,49 +555,108 @@
     window.scrollTo(0, 0);
     var opt = {
       margin: [10, 10, 12, 10],
-      filename: pdfFilename(),
+      filename: pdfFilename(doc),
       image: { type: "jpeg", quality: 0.96 },
       // windowWidth pins the capture to the document's own width (760) on every
       // device, so a phone's narrow screen can't trigger the mobile layout or clip
       // the right edge. Must equal the .pdf-doc width exactly — 800 left slack that
       // re-introduced the right-edge clip; a narrow real viewport produced blank,
       // stacked, many-page output.
-      html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, scrollX: 0, scrollY: 0, windowWidth: 760 },
+      html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true, x: 0, y: 0, scrollX: 0, scrollY: 0, windowWidth: 760, width: 760 },
       jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
       pagebreak: { mode: ["css", "legacy"] }
     };
     // Render to the jsPDF instance, stamp footers on every page, then the caller
     // continues with .save() / .outputPdf("blob").
-    var worker = window.html2pdf().set(opt).from(element).toPdf().get("pdf").then(addFooters);
+    var worker = window.html2pdf().set(opt).from(element).toPdf().get("pdf").then(function (pdf) {
+      addFooters(pdf, doc.title);
+    });
     return { worker: worker, cleanup: function () {
       if (element.parentNode) document.body.removeChild(element);
       if (cover.parentNode) document.body.removeChild(cover);
       window.scrollTo(0, prevScroll);
     } };
   }
-  function downloadPdf() {
-    if (!currentSessions.length || !window.html2pdf) return;
-    var j = makePdfWorker();
+  function docReady(doc) {
+    return doc && doc.sections && doc.sections.filter(function (s) { return s && s.trim(); }).length && window.html2pdf;
+  }
+  function downloadDoc(doc) {
+    if (!docReady(doc)) return;
+    var j = makePdfWorker(doc);
     j.worker.save().then(j.cleanup, j.cleanup);
   }
-  function sharePdf() {
-    if (!currentSessions.length || !window.html2pdf) return;
-    var j = makePdfWorker();
+  function shareDoc(doc) {
+    if (!docReady(doc)) return;
+    var j = makePdfWorker(doc);
+    var name = pdfFilename(doc);
     j.worker.outputPdf("blob").then(function (blob) {
       j.cleanup();
-      var file = new File([blob], pdfFilename(), { type: "application/pdf" });
-      var text = planTitleText + " — lesson plan from Dr. Dasarathan International School.";
+      var file = new File([blob], name, { type: "application/pdf" });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: planTitleText, text: text }).catch(function () {});
+        navigator.share({ files: [file], title: doc.title, text: doc.shareText }).catch(function () {});
       } else {
         // Fallback: save the PDF, then open WhatsApp to attach it.
         var url = URL.createObjectURL(blob);
-        var a = document.createElement("a"); a.href = url; a.download = pdfFilename();
+        var a = document.createElement("a"); a.href = url; a.download = name;
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
         setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
-        window.open("https://wa.me/?text=" + encodeURIComponent(text + " (The PDF has been saved to your device — attach it in WhatsApp.)"), "_blank");
+        window.open("https://wa.me/?text=" + encodeURIComponent(doc.shareText + " (The PDF has been saved to your device — attach it in WhatsApp.)"), "_blank");
       }
     }, function () { j.cleanup(); });
+  }
+
+  // ---- Chapter folder ----------------------------------------------------
+  // Build the list of files the teacher can open or share. No extra Gemini
+  // calls — every file comes from the markdown already generated.
+  var folderFiles = [];
+  function buildFolder() {
+    folderFiles = [];
+    var n = currentSessions.length;
+    folderFiles.push({
+      ico: "📘", name: "Complete Lesson Plan",
+      sub: n + " session" + (n > 1 ? "s" : "") + (summaryMarkdown ? " + summary" : "") + " · for you",
+      doc: fullDoc(),
+      acts: [{ act: "download", label: "Download", primary: true }, { act: "print", label: "Print" }]
+    });
+    if (summaryMarkdown) {
+      folderFiles.push({
+        ico: "📝", name: "Chapter Summary",
+        sub: "Revision · teacher & child",
+        doc: summaryDoc(),
+        acts: [{ act: "download", label: "Download", primary: true }, { act: "share", label: "Share" }]
+      });
+    }
+    for (var i = 0; i < currentSessions.length; i++) {
+      var ep = extractEveningPost(currentSessions[i]);
+      if (!ep) continue;
+      folderFiles.push({
+        ico: "💌", name: "Evening Post · Session " + (i + 1),
+        sub: "For parents · WhatsApp",
+        doc: eveningDoc(i, ep),
+        acts: [{ act: "share", label: "Share", primary: true }, { act: "download", label: "Download" }]
+      });
+    }
+    el("filesList").innerHTML = folderFiles.map(function (f, idx) {
+      var acts = f.acts.map(function (a) {
+        return '<button type="button" class="btn small ' + (a.primary ? "primary" : "ghost") +
+          '" data-i="' + idx + '" data-act="' + a.act + '">' + a.label + "</button>";
+      }).join("");
+      return '<div class="file-row">' +
+        '<div class="file-info"><span class="file-ico">' + f.ico + '</span>' +
+        '<span class="file-text"><span class="file-name">' + esc(f.name) + '</span>' +
+        '<span class="file-sub">' + esc(f.sub) + "</span></span></div>" +
+        '<div class="file-acts">' + acts + "</div></div>";
+    }).join("");
+  }
+  function onFileAct(e) {
+    var b = e.target.closest ? e.target.closest("button[data-act]") : null;
+    if (!b) return;
+    var f = folderFiles[parseInt(b.getAttribute("data-i"), 10)];
+    if (!f) return;
+    var act = b.getAttribute("data-act");
+    if (act === "print") { window.print(); return; }
+    if (act === "download") { downloadDoc(f.doc); return; }
+    if (act === "share") { shareDoc(f.doc); return; }
   }
 
   // ---- Wiring -----------------------------------------------------------
@@ -558,10 +665,8 @@
     initLoginGate();
     el("loginForm").addEventListener("submit", handleLogin);
     el("chapter-form").addEventListener("submit", handleSubmit);
-    el("pdfBtn").addEventListener("click", downloadPdf);
-    el("waBtn").addEventListener("click", sharePdf);
-    el("printPlanBtn").addEventListener("click", function () { window.print(); });
     el("regenBtn").addEventListener("click", regenerate);
+    el("filesList").addEventListener("click", onFileAct);
     el("chapterFile").addEventListener("change", function () {
       if (el("chapterFile").files.length) el("field-chapterFile").classList.remove("invalid");
     });

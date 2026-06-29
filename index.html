@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,500;1,500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260629e" />
+  <link rel="stylesheet" href="styles.css?v=20260629f" />
 </head>
 <body>
   <!-- LOGIN GATE (shared school password) -->
@@ -125,18 +125,20 @@
               <h3 id="planTitle">Your lesson plan</h3>
               <ul id="planMeta" class="plan-meta"></ul>
             </div>
-            <div class="toolbar-actions hidden" id="toolbarActions">
-              <button type="button" class="btn small primary" id="pdfBtn">Download PDF</button>
-              <button type="button" class="btn small ghost" id="waBtn">Share on WhatsApp</button>
-              <button type="button" class="btn small ghost" id="printPlanBtn">Print</button>
-              <button type="button" class="btn small ghost" id="regenBtn">Make again</button>
-            </div>
           </div>
           <div id="genProgress" class="gen-progress hidden">
             <div class="gen-progress-track"><div class="gen-progress-fill" id="genProgressFill"></div></div>
             <div class="gen-progress-label" id="genProgressLabel"></div>
           </div>
           <div id="genStatus" class="gen-status hidden" role="status" aria-live="assertive"></div>
+
+          <!-- CHAPTER FOLDER — each file can be downloaded or shared on its own -->
+          <div id="planFiles" class="plan-files hidden">
+            <div class="files-head">Your files</div>
+            <div id="filesList" class="files-list"></div>
+            <button type="button" class="btn small ghost regen" id="regenBtn">Make the whole chapter again</button>
+          </div>
+
           <div id="planBody" class="rendered" aria-live="polite"></div>
         </div>
       </div>
@@ -151,6 +153,6 @@
   </footer>
 
   <script src="assets/vendor/html2pdf.bundle.min.js"></script>
-  <script src="app.js?v=20260629e"></script>
+  <script src="app.js?v=20260629f"></script>
 </body>
 </html>
