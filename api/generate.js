@@ -52,6 +52,11 @@ function addendum(d) {
     "- Assessment for Learning: tie each check to a specific Learning Outcome.",
     "- Part Three: a short closure/plenary + an exit ticket linked to the outcomes.",
     "- In-class step minutes must add up to the session length.",
+    "- Story: original and warm, set in a Tamil Nadu / Coimbatore context, built from",
+    "  the chapter's own characters and target words; keep the SAME recurring character",
+    "  across the chapter's sessions.",
+    "- Tone: warm, simple, and encouraging throughout — written for a teacher of young",
+    "  children, and easy for that teacher to read and follow.",
     "",
     "=== NON-NEGOTIABLE ===",
     "The plan is complete ONLY when it ends with Part Three and a full Evening Post;",
@@ -104,7 +109,7 @@ module.exports = async function (req, res) {
 
   var files = Array.isArray(d.files) ? d.files : [];
   if (!files.length) {
-    res.status(400).json({ error: "Please upload the chapter pages (a PDF or photos) so I can read the chapter." });
+    res.status(400).json({ error: "Please upload the chapter PDF so I can read the chapter." });
     return;
   }
   d.grade = d.grade || "Grade 3";

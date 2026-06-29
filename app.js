@@ -92,7 +92,7 @@
     for (var i = 0; i < files.length; i++) total += files[i].size;
     if (total > MAX_BYTES) {
       el("planResult").classList.remove("hidden"); el("planBody").innerHTML = ""; showToolbar(false);
-      setStatus("Your upload is " + (total / 1048576).toFixed(1) + " MB. Please keep it under 3 MB — try a PDF, or fewer / smaller photos.", "warn");
+      setStatus("Your upload is " + (total / 1048576).toFixed(1) + " MB. Please keep it under 3 MB — try a smaller or shorter chapter PDF.", "warn");
       el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
