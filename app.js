@@ -15,7 +15,8 @@
 
   function buildStarter(d) {
     return [
-      "Hello! I would like to plan a chapter. Here are my details:",
+      "Hello! I teach at Dr. Dasarathan International School, an ICSE school in",
+      "Coimbatore, Tamil Nadu. I would like to plan a chapter. Here are my details:",
       "",
       "• Chapter Number: " + d.chapterNo,
       "• Chapter Name: " + d.chapterName,

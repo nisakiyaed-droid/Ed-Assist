@@ -16,6 +16,10 @@
   --surface:#ffffff;
   --surface-2:#fbfcfe;
 
+  /* School identity — navy from the logo lettering */
+  --navy:#2c3a6b;
+  --navy-soft:#eef1f8;
+
   /* Brand (green) + tints */
   --brand:#2f7d34;
   --brand-dark:#256528;
@@ -75,17 +79,26 @@ img{max-width:100%; display:block;}
 .site-header{
   position:sticky; top:0; z-index:20;
   display:flex; align-items:center; gap:12px;
-  padding:14px 20px;
-  background:rgba(255,255,255,.82);
+  padding:11px 18px;
+  background:rgba(255,255,255,.85);
   backdrop-filter:saturate(160%) blur(10px);
   -webkit-backdrop-filter:saturate(160%) blur(10px);
   border-bottom:1px solid var(--line);
 }
-.brand{display:flex; align-items:center; gap:9px; font-weight:800; font-size:18px; letter-spacing:-.02em;}
-.brand-mark{font-size:18px; line-height:1;}
+.brand{display:flex; align-items:center; gap:11px; text-decoration:none; min-width:0;}
+.brand-logo{height:38px; width:auto; flex:none;}
+.brand-text{display:flex; flex-direction:column; line-height:1.15; min-width:0;}
+.brand-name{font-weight:800; font-size:15px; letter-spacing:-.01em; color:var(--navy);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.brand-sub{font-size:11.5px; font-weight:600; color:var(--soft); letter-spacing:.02em;}
 .brand-tag{
-  margin-left:auto; color:var(--brand-700); font-size:12.5px; font-weight:600;
+  margin-left:auto; flex:none; color:var(--brand-700); font-size:12.5px; font-weight:600;
   padding:5px 12px; background:var(--brand-soft); border-radius:var(--pill);
+}
+@media(max-width:520px){
+  .brand-name{font-size:13.5px; white-space:normal;}
+  .brand-sub, .brand-tag{display:none;}
+  .brand-logo{height:34px;}
 }
 
 /* =====================================================================
@@ -96,14 +109,14 @@ img{max-width:100%; display:block;}
   padding:clamp(40px,8vw,72px) 20px clamp(24px,4vw,34px);
 }
 .eyebrow{
-  display:inline-flex; align-items:center; gap:7px;
-  font-size:12.5px; font-weight:600; color:var(--brand-700);
-  background:var(--brand-soft); border:1px solid #d6ebd8;
-  padding:6px 13px; border-radius:var(--pill); margin:0 0 20px;
+  display:inline-flex; align-items:center; gap:8px;
+  font-size:13px; font-weight:700; font-style:italic; letter-spacing:.01em; color:var(--navy);
+  background:var(--navy-soft); border:1px solid #dde3f2;
+  padding:6px 15px; border-radius:var(--pill); margin:0 0 20px;
 }
 .hero h1{
   font-size:var(--fs-hero); line-height:1.08; letter-spacing:-.03em;
-  margin:0 0 16px; font-weight:800; color:var(--ink);
+  margin:0 0 16px; font-weight:800; color:var(--navy);
 }
 .lead{
   font-size:var(--fs-lead); line-height:1.55; color:var(--soft);
@@ -138,7 +151,7 @@ img{max-width:100%; display:block;}
    ===================================================================== */
 .how{max-width:var(--maxw); margin-inline:auto; padding:clamp(20px,4vw,40px) 20px 8px;}
 .how h2, .start h2, .sample h2{
-  font-size:var(--fs-h2); letter-spacing:-.02em; text-align:center; margin:0 0 8px; font-weight:800;
+  font-size:var(--fs-h2); letter-spacing:-.02em; text-align:center; margin:0 0 8px; font-weight:800; color:var(--navy);
 }
 .section-sub{text-align:center; color:var(--soft); margin:0 auto clamp(22px,3vw,30px); max-width:520px; font-size:15px;}
 .steps{display:grid; grid-template-columns:1fr; gap:14px;}
@@ -250,4 +263,11 @@ select{
 /* =====================================================================
    Footer
    ===================================================================== */
-.site-footer{text-align:center; color:var(--faint); font-size:13px; padding:clamp(40px,6vw,64px) 20px 40px;}
+.site-footer{
+  text-align:center; padding:clamp(40px,6vw,64px) 20px 44px;
+  display:flex; flex-direction:column; align-items:center; gap:7px;
+}
+.footer-logo{height:40px; width:auto; margin-bottom:4px; opacity:.95;}
+.footer-school{font-weight:800; color:var(--navy); font-size:15px; letter-spacing:-.01em;}
+.footer-motto{font-style:italic; color:var(--brand-dark); font-size:13.5px; font-weight:600;}
+.footer-meta{color:var(--faint); font-size:12.5px;}
