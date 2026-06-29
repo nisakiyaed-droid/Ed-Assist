@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,500;1,500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260629b" />
+  <link rel="stylesheet" href="styles.css?v=20260629c" />
 </head>
 <body>
   <header class="site-header">
@@ -27,11 +27,11 @@
     <!-- HERO -->
     <section class="hero">
       <span class="eyebrow">Inspire… Explore… Excel…</span>
-      <h1>Upload a chapter. Get a lesson plan.</h1>
+      <h1>Turn any textbook chapter into a&nbsp;ready-to-teach lesson plan.</h1>
       <p class="lead">
-        Add the chapter pages and pick the session. You'll get a complete,
-        ready-to-teach plan as a PDF — built around a story your children will love,
-        and ready to share on WhatsApp.
+        Upload the chapter, pick the class — and get a complete, colour-coded plan
+        as a PDF in minutes. Built around a story your children will love, and
+        ready to share on WhatsApp. No typing the chapter, no login for teachers.
       </p>
       <div class="hero-actions">
         <a href="#start" class="btn primary">Make a lesson plan</a>
@@ -100,7 +100,10 @@
         <!-- GENERATED PLAN -->
         <div id="planResult" class="result hidden">
           <div class="output-toolbar">
-            <h3 id="planTitle">Your lesson plan</h3>
+            <div class="output-head">
+              <h3 id="planTitle">Your lesson plan</h3>
+              <ul id="planMeta" class="plan-meta"></ul>
+            </div>
             <div class="toolbar-actions hidden" id="toolbarActions">
               <button type="button" class="btn small primary" id="pdfBtn">Download PDF</button>
               <button type="button" class="btn small ghost" id="waBtn">Share on WhatsApp</button>
@@ -136,6 +139,6 @@
   </footer>
 
   <script src="assets/vendor/html2pdf.bundle.min.js"></script>
-  <script src="app.js?v=20260629b"></script>
+  <script src="app.js?v=20260629c"></script>
 </body>
 </html>

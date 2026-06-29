@@ -313,6 +313,11 @@ input[type="file"]:hover{border-color:var(--brand);}
 .output-toolbar{display:flex; align-items:center; justify-content:space-between; gap:12px;
   margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid var(--line);}
 .output-toolbar h3{margin:0; font-size:var(--fs-h3); color:var(--navy); letter-spacing:-.01em;}
+.output-head{flex:1 1 auto; min-width:0;}
+/* Grade · Subject · Sessions shown as clean bullets, one under another */
+.plan-meta{list-style:disc; margin:6px 0 0; padding:0 0 0 18px; color:var(--soft); font-size:14px;}
+.plan-meta li{margin:2px 0;}
+.plan-meta:empty{display:none;}
 .toolbar-actions{display:flex; gap:8px;}
 /* Keep Download / Share / Print completely away until generation is finished.
    Two-class selector so it always beats the plain .toolbar-actions display. */

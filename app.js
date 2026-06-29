@@ -29,6 +29,11 @@
     s.classList.remove("hidden");
   }
   function showToolbar(on) { el("toolbarActions").classList.toggle("hidden", !on); }
+  function setMeta(items) {
+    el("planMeta").innerHTML = items.map(function (x) {
+      return "<li>" + String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;") + "</li>";
+    }).join("");
+  }
   function showProgress(on) { el("genProgress").classList.toggle("hidden", !on); }
   function setProgress(done, total, label) {
     var pct = total ? Math.round((done / total) * 100) : 0;
@@ -107,7 +112,8 @@
     showProgress(true);                       // only a progress bar shows during generation
     setProgress(0, N, "Reading your chapter…");
     el("genStatus").classList.add("hidden");
-    el("planTitle").textContent = base.grade + " · " + base.subject + " · " + N + " session" + (N > 1 ? "s" : "");
+    el("planTitle").textContent = "Your lesson plan";
+    setMeta([base.grade, base.subject, N + " session" + (N > 1 ? "s" : "")]);
     el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
 
     var jobs = [];
@@ -171,7 +177,8 @@
     el("planBody").innerHTML = html;
     planTitleText = chapterTitle();
     var N = parseInt(el("sessions").value, 10) || currentSessions.length;
-    el("planTitle").textContent = planTitleText + " · " + currentSessions.length + "/" + N + " sessions";
+    el("planTitle").textContent = planTitleText;
+    setMeta([el("grade").value, el("subject").value, currentSessions.length + " of " + N + " session" + (N > 1 ? "s" : "")]);
   }
 
   // ---- Safe Markdown renderer (no external dependency) ------------------
