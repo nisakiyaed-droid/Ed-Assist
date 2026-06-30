@@ -610,6 +610,14 @@ module.exports = async function (req, res) {
 
 module.exports.config = { maxDuration: 60 };
 
+// Exported so the background-job endpoints (start/step/status) can reuse the
+// exact same engine and quality gates instead of duplicating them.
+module.exports.callGemini = callGemini;
+module.exports.planPasses = planPasses;
+module.exports.summaryPasses = summaryPasses;
+module.exports.mapPasses = mapPasses;
+module.exports.defaultModel = function () { return process.env.GEMINI_MODEL || "gemini-2.5-flash"; };
+
 // Exported for local testing (no effect on the serverless handler).
 module.exports.addendum = addendum;
 module.exports.userMessage = userMessage;
