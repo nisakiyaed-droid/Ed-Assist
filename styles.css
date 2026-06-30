@@ -106,7 +106,7 @@ img{max-width:100%; display:block;}
    ===================================================================== */
 .hero{
   max-width:740px; margin-inline:auto; text-align:center;
-  padding:clamp(40px,8vw,72px) 20px clamp(24px,4vw,34px);
+  padding:clamp(26px,6vw,56px) 20px clamp(20px,3vw,30px);
 }
 .eyebrow{
   display:inline-flex; align-items:center; gap:8px;
