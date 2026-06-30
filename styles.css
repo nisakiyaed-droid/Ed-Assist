@@ -555,6 +555,16 @@ input[type="file"]:hover{border-color:var(--brand);}
 .plan-summary{border-top:2px dashed var(--line); margin-top:8px; padding-top:8px;}
 .pdf-doc .plan-summary{page-break-before:always; break-before:page; border-top:none; margin-top:0; padding-top:0;}
 
+/* Mind maps (PRD §8.3) — crisp inline SVG that scales to its container. */
+.map-card{margin:14px 0; padding:10px; border:1px solid var(--line); border-radius:var(--r-sm);
+  background:#fff; overflow:hidden;}
+.map-card svg{display:block; width:100%; height:auto;}
+.map-screen{border:none;}
+.map-screen .map-card{border-color:var(--brand-soft); background:var(--brand-tint);}
+/* The daily map riding inside an Evening Post PDF. */
+.pdf-daily-map{margin:2px 0 10px; text-align:center;}
+.pdf-daily-map img{width:66%; max-width:360px; display:inline-block;}
+
 /* =====================================================================
    LOGIN GATE — shared school password (PRD §5.1)
    ===================================================================== */

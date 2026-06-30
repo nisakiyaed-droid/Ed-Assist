@@ -86,6 +86,9 @@
   var planTitleText = "Lesson plan";
   var currentSessions = [];
   var summaryMarkdown = "";          // the whole-chapter revision sheet (PRD §3.1)
+  var chapterMapData = null;         // { title, branches[] } for the Chapter Learning Map
+  var dailyMapData = [];             // [{ topic, ideas[] }] one per session
+  var dailyPng = [];                 // pre-rendered daily-map PNGs (for the Evening Post PDFs)
   var lastMarkdown = "";
   // Remembered inputs from the last run, so "Make again" can repeat it exactly
   // without re-reading the file from disk.
@@ -191,7 +194,7 @@
   // Core generation flow — used by both Generate and "Make again".
   function runGeneration(base, fileParts) {
     var N = base.sessions;
-    var STEPS = N + 1;                         // N sessions + one chapter summary
+    var STEPS = N + 2;                         // N sessions + chapter summary + mind maps
     lastRun = { base: base, fileParts: fileParts }; // cache for "Make again"
 
     var btn = el("generateBtn");
@@ -201,6 +204,7 @@
     el("planResult").classList.remove("hidden");
     el("planBody").innerHTML = "";            // the plan itself stays hidden until ALL sessions are done
     currentSessions = []; summaryMarkdown = ""; lastMarkdown = "";
+    chapterMapData = null; dailyMapData = []; dailyPng = [];
     var anyTruncated = false;
     var anyLowQuality = false;
     showToolbar(false);                       // buttons stay away until all sessions are done
@@ -246,11 +250,35 @@
       }).then(function (json) {
         summaryMarkdown = json.markdown || "";
         if (json.lowQuality) anyLowQuality = true;
-        setProgress(STEPS, STEPS, "Your plan is ready.");
+        setProgress(N + 1, STEPS, "Drawing your mind maps…");
       }, function () { /* summary is optional — keep the sessions regardless */ });
     }
 
-    Promise.resolve().then(next).then(makeSummary).then(function () {
+    // Last, draw the mind maps (Chapter Learning Map + a daily map per session).
+    // Also optional — a failure never throws away the plan the teacher has.
+    function makeMaps() {
+      if (!currentSessions.length || !window.MapRender) return Promise.resolve();
+      setProgress(N + 1, STEPS, "Drawing your mind maps…");
+      return postGenerateRetry({
+        grade: base.grade, subject: base.subject, sessions: N, mode: "map",
+        chapterNumber: base.chapterNumber, chapterName: base.chapterName,
+        password: getPw(), files: fileParts, prior: currentSessions.join("\n\n")
+      }, function (tryNo) {
+        setProgress(N + 1, STEPS, "Slow connection — trying the mind maps again (try " + (tryNo + 1) + " of 3)…");
+      }).then(function (json) {
+        var parsed = parseMapText(json.markdown || "");
+        if (parsed.branches.length) chapterMapData = { title: parsed.title, branches: parsed.branches };
+        dailyMapData = parsed.daily || [];
+        // Pre-render each daily map to a PNG so the Evening Post PDFs can embed it.
+        var jobs = dailyMapData.map(function (d, i) {
+          if (!d || !(d.ideas || []).length) return Promise.resolve();
+          return svgObjToImg(window.MapRender.buildDailyMapSVG(d)).then(function (png) { dailyPng[i] = png; }, function () {});
+        });
+        return Promise.all(jobs);
+      }, function () { /* maps are optional */ });
+    }
+
+    Promise.resolve().then(next).then(makeSummary).then(makeMaps).then(function () {
       showProgress(false);
       renderSessions(anyTruncated || anyLowQuality); // reveal the whole plan at once
       showToolbar(true);                       // only now are Download / Share / Print available
@@ -277,11 +305,58 @@
     return t.replace(/\s*[—-]\s*Session.*$/i, "").trim();
   }
 
+  // Parse the mind-map outline (PRD §8.3) into { title, branches, daily }.
+  // Branches: '## N. label' with '- pointer' and two-space '  - detail' bullets.
+  // Daily: under '# Daily Maps', '## Session k: topic' with '- idea' bullets.
+  function parseMapText(md) {
+    var lines = String(md || "").replace(/\r\n/g, "\n").split("\n");
+    var title = "", branches = [], daily = [], section = "", br = null, ptr = null, day = null;
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i], line = raw.trim();
+      if (!line) continue;
+      var h2 = line.match(/^##\s+(.*)$/);
+      if (h2) {
+        var t2 = h2[1].trim();
+        if (section === "chapter") { br = { label: t2.replace(/^\d+[.)]\s*/, "").trim(), pointers: [] }; branches.push(br); ptr = null; }
+        else if (section === "daily") { var dm = t2.match(/^session\s*\d*\s*[:\-—.]?\s*(.*)$/i); day = { topic: ((dm && dm[1]) || t2).trim() || t2, ideas: [] }; daily.push(day); }
+        continue;
+      }
+      var h1 = line.match(/^#\s+(.*)$/);
+      if (h1) {
+        var t1 = h1[1].trim();
+        if (/^chapter\s*map\s*:/i.test(t1)) { section = "chapter"; title = t1.replace(/^chapter\s*map\s*:\s*/i, "").trim(); }
+        else if (/daily\s*maps?/i.test(t1)) { section = "daily"; }
+        else if (section === "chapter" && !title) { title = t1; }
+        continue;
+      }
+      var b = raw.match(/^(\s*)[-*+]\s+(.*)$/);
+      if (b) {
+        var indent = b[1].replace(/\t/g, "  ").length, text = b[2].trim();
+        if (section === "chapter") {
+          if (indent >= 2 && ptr) { ptr.details.push(text); }
+          else if (br) { ptr = { label: text, details: [] }; br.pointers.push(ptr); }
+        } else if (section === "daily" && day) { day.ideas.push(text); }
+      }
+    }
+    return { title: title || "Chapter", branches: branches, daily: daily };
+  }
+
+  // Wrap a map SVG for crisp, responsive on-screen display.
+  function mapCard(svg, label) {
+    return '<div class="map-card">' + (label ? '<div class="map-card-label">' + esc(label) + "</div>" : "") + svg + "</div>";
+  }
   function renderSessions(truncated) {
     lastMarkdown = currentSessions.concat(summaryMarkdown ? [summaryMarkdown] : []).join("\n\n");
-    var html = currentSessions.map(function (md) {
-      return '<section class="plan-session">' + mdToHtml(md) + "</section>";
+    var html = currentSessions.map(function (md, i) {
+      var dm = (window.MapRender && dailyMapData[i] && (dailyMapData[i].ideas || []).length)
+        ? mapCard(window.MapRender.buildDailyMapSVG(dailyMapData[i]).svg, "") : "";
+      return '<section class="plan-session">' + mdToHtml(md) + dm + "</section>";
     }).join("");
+    // The Chapter Learning Map opens the plan on screen (its own landscape file too).
+    if (window.MapRender && chapterMapData) {
+      html = '<section class="plan-session map-screen">' +
+        mapCard(window.MapRender.buildChapterMapSVG(chapterMapData).svg, "") + "</section>" + html;
+    }
     if (summaryMarkdown) {
       html += '<section class="plan-session plan-summary">' + mdToHtml(summaryMarkdown) + "</section>";
     }
@@ -485,12 +560,26 @@
   }
   function eveningDoc(i, ep) {
     var k = i + 1;
+    // The daily mind map rides inside the Evening Post (PRD §3.8). The <img>
+    // carries EXPLICIT width/height — without them html2canvas lays out the rest
+    // of the page before the data-URL decodes and drops everything after it.
+    var pre = dailyPng[i]
+      ? '<div class="pdf-daily-map"><img src="' + dailyPng[i] + '" width="360" height="208" style="width:360px;height:208px" /></div>' : "";
     return {
       title: planTitleText + " — Evening Post (Session " + k + ")",
-      sections: [ep],
+      sections: [ep], preHtml: pre,
       hint: planTitleText + " Evening Post S" + k,
       shareText: "Today's class update — " + planTitleText + " (Session " + k + "), " +
         "Dr. Dasarathan International School."
+    };
+  }
+  // The Chapter Learning Map is an image doc (landscape) — rendered separately.
+  function chapterMapDoc() {
+    return {
+      kind: "chaptermap",
+      title: planTitleText + " — Chapter Learning Map",
+      hint: planTitleText + " Chapter Map",
+      shareText: planTitleText + " — Chapter Learning Map (Dr. Dasarathan International School)."
     };
   }
 
@@ -509,8 +598,73 @@
       var cls = "plan-session" + (idx > 0 ? " plan-summary" : ""); // page-break before extra sections
       return '<section class="' + cls + '"><div class="rendered">' + mdToHtml(md) + '</div></section>';
     }).join("");
-    wrap.innerHTML = head + body;
+    wrap.innerHTML = head + (doc.preHtml || "") + body;
     return wrap;
+  }
+
+  // --- Mind-map images ----------------------------------------------------
+  // Rasterise an {svg,width,height} object to a PNG data URL (crisp, and safe
+  // for html2canvas, which renders <img> reliably but inline SVG unevenly).
+  function svgObjToImg(obj, jpeg) {
+    return new Promise(function (resolve, reject) {
+      var img = new Image();
+      img.onload = function () {
+        var scale = 2, c = document.createElement("canvas");
+        c.width = obj.width * scale; c.height = obj.height * scale;
+        var ctx = c.getContext("2d");
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, c.width, c.height);
+        ctx.scale(scale, scale); ctx.drawImage(img, 0, 0, obj.width, obj.height);
+        // JPEG for the standalone map (jsPDF stores PNG as a raw bitmap → ~11MB;
+        // a high-quality JPEG of the same map is ~300KB and still crisp at 2×).
+        resolve(jpeg ? c.toDataURL("image/jpeg", 0.94) : c.toDataURL("image/png"));
+      };
+      img.onerror = reject;
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(obj.svg);
+    });
+  }
+  // Build the Chapter Learning Map as a one-page A4 LANDSCAPE PDF. We obtain a
+  // jsPDF instance via a tiny blank render (the bundle exposes only html2pdf),
+  // then place the map ourselves so it is always contained on a single page.
+  function chapterMapPdfBlob() {
+    if (!window.MapRender || !chapterMapData) return Promise.reject(new Error("no map"));
+    var m = window.MapRender.buildChapterMapSVG(chapterMapData);
+    return svgObjToImg(m, true).then(function (png) {
+      var tiny = document.createElement("div");
+      tiny.style.cssText = "width:8px;height:8px;background:#fff";
+      document.body.appendChild(tiny);
+      return window.html2pdf().set({
+        jsPDF: { unit: "mm", format: "a4", orientation: "landscape" },
+        html2canvas: { scale: 1, backgroundColor: "#ffffff" }
+      }).from(tiny).toPdf().get("pdf").then(function (pdf) {
+        if (tiny.parentNode) tiny.parentNode.removeChild(tiny);
+        var pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight();
+        var mg = 8, top = 20;
+        pdf.setFont("helvetica", "bold"); pdf.setFontSize(13); pdf.setTextColor(27, 58, 91);
+        pdf.text("Dr. Dasarathan International School", mg, 12);
+        pdf.setFont("helvetica", "italic"); pdf.setFontSize(9); pdf.setTextColor(120, 130, 148);
+        pdf.text("Inspire… Explore… Excel… · ICSE, Coimbatore", mg, 17);
+        var availW = pw - mg * 2, availH = ph - top - mg, ar = m.width / m.height;
+        var dw = availW, dh = dw / ar; if (dh > availH) { dh = availH; dw = dh * ar; }
+        pdf.addImage(png, "JPEG", (pw - dw) / 2, top + (availH - dh) / 2, dw, dh);
+        addFooters(pdf, planTitleText + " — Chapter Learning Map");
+        return pdf.output("blob");
+      });
+    });
+  }
+  function saveBlob(blob, name) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a"); a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+  function shareBlob(blob, name, title, text) {
+    var file = new File([blob], name, { type: "application/pdf" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: title, text: text }).catch(function () {});
+    } else {
+      saveBlob(blob, name);
+      window.open("https://wa.me/?text=" + encodeURIComponent(text + " (The PDF has been saved to your device — attach it in WhatsApp.)"), "_blank");
+    }
   }
   // Draw a thin footer on every page: school · title on the left, version ·
   // date · page number on the right (house-style requirement).
@@ -578,30 +732,30 @@
     } };
   }
   function docReady(doc) {
-    return doc && doc.sections && doc.sections.filter(function (s) { return s && s.trim(); }).length && window.html2pdf;
+    if (!doc || !window.html2pdf) return false;
+    if (doc.kind === "chaptermap") return !!chapterMapData;
+    return doc.sections && doc.sections.filter(function (s) { return s && s.trim(); }).length;
   }
   function downloadDoc(doc) {
     if (!docReady(doc)) return;
+    if (doc.kind === "chaptermap") {
+      chapterMapPdfBlob().then(function (blob) { saveBlob(blob, pdfFilename(doc)); }, function () {});
+      return;
+    }
     var j = makePdfWorker(doc);
     j.worker.save().then(j.cleanup, j.cleanup);
   }
   function shareDoc(doc) {
     if (!docReady(doc)) return;
-    var j = makePdfWorker(doc);
     var name = pdfFilename(doc);
+    if (doc.kind === "chaptermap") {
+      chapterMapPdfBlob().then(function (blob) { shareBlob(blob, name, doc.title, doc.shareText); }, function () {});
+      return;
+    }
+    var j = makePdfWorker(doc);
     j.worker.outputPdf("blob").then(function (blob) {
       j.cleanup();
-      var file = new File([blob], name, { type: "application/pdf" });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        navigator.share({ files: [file], title: doc.title, text: doc.shareText }).catch(function () {});
-      } else {
-        // Fallback: save the PDF, then open WhatsApp to attach it.
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement("a"); a.href = url; a.download = name;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a);
-        setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
-        window.open("https://wa.me/?text=" + encodeURIComponent(doc.shareText + " (The PDF has been saved to your device — attach it in WhatsApp.)"), "_blank");
-      }
+      shareBlob(blob, name, doc.title, doc.shareText);
     }, function () { j.cleanup(); });
   }
 
@@ -618,6 +772,14 @@
       doc: fullDoc(),
       acts: [{ act: "download", label: "Download", primary: true }, { act: "print", label: "Print" }]
     });
+    if (chapterMapData) {
+      folderFiles.push({
+        ico: "🗺️", name: "Chapter Learning Map",
+        sub: "A colourful picture of the chapter",
+        doc: chapterMapDoc(),
+        acts: [{ act: "download", label: "Download", primary: true }, { act: "share", label: "Share" }]
+      });
+    }
     if (summaryMarkdown) {
       folderFiles.push({
         ico: "📝", name: "Chapter Summary",

@@ -172,6 +172,84 @@ function summaryUserMessage(d) {
   return lines.join("\n");
 }
 
+// Mind-map overlay (PRD §3.8 / §8.3). One call returns a structured outline the
+// app draws into two maps: a Chapter Map (pure content, four-level tree) and one
+// Daily Map per session (topic + 3-4 ideas).
+function mapAddendum(d) {
+  return [
+    "",
+    "=== TASK ===",
+    "Produce the mind-map content for this chapter as a structured outline, in one",
+    "reply. Two parts: a Chapter Map (pure content) and Daily Maps (one per session).",
+    "Do not ask questions or wait for approval.",
+    "",
+    "=== GROUND IT IN THE CHAPTER (do not invent) ===",
+    "Use only ideas from the ATTACHED chapter and the sessions below. Add no new facts.",
+    "",
+    "=== CHAPTER MAP (content only — NO sessions, NO teaching order, NO story) ===",
+    "A four-level tree of the chapter's ideas and how they connect:",
+    "  Level 1 = the chapter (its title).",
+    "  Level 2 = 3 to 5 main branches (the big sub-topics).",
+    "  Level 3 = pointers under each branch (2 to 4 each).",
+    "  Level 4 = short detail bubbles under a pointer (0 to 2 each), only where useful.",
+    "Every label SHORT — 1 to 4 words, child-friendly, readable on its own.",
+    "",
+    "=== DAILY MAPS (one per session) ===",
+    "For each of the " + d.sessions + " sessions: the day's topic (2-4 words) and 3 to 4",
+    "key ideas (each 2-5 words) that mirror what that session teaches.",
+    "",
+    "=== OUTPUT FORMAT (exact — the app draws the maps from this) ===",
+    "# Chapter Map: <chapter title>",
+    "## 1. <branch>",
+    "- <pointer>",
+    "  - <detail>",
+    "- <pointer>",
+    "## 2. <branch>",
+    "(continue for every branch)",
+    "",
+    "# Daily Maps",
+    "## Session 1: <day topic>",
+    "- <key idea>",
+    "- <key idea>",
+    "- <key idea>",
+    "## Session 2: <day topic>",
+    "(continue for all " + d.sessions + " sessions)",
+    "",
+    "=== NON-NEGOTIABLE ===",
+    "Output ONLY this outline as clean Markdown — no preamble, no explanation, no extra",
+    "prose. Number the branches ('## 1. '). Indent detail bubbles with two spaces."
+  ].join("\n");
+}
+
+function mapUserMessage(d) {
+  var lines = [
+    "School: Dr. Dasarathan International School, Coimbatore, Tamil Nadu (ICSE).",
+    "Grade: " + d.grade,
+    "Subject: " + d.subject,
+    "Total Sessions: " + d.sessions,
+    "Generate: the mind-map outline for the whole chapter. The chapter pages are attached."
+  ];
+  if (d.chapterNumber || d.chapterName) {
+    lines.push(
+      "The teacher has confirmed the chapter as " +
+      (d.chapterNumber ? "Chapter " + d.chapterNumber : "this chapter") +
+      (d.chapterName ? ": " + d.chapterName : "") +
+      ". Use exactly that chapter name in the title."
+    );
+  }
+  if (d.prior && String(d.prior).trim()) {
+    lines.push(
+      "",
+      "=== ALL SESSIONS OF THIS CHAPTER (already written) ===",
+      "Use these for the Daily Maps (one per session, in order) and to stay consistent",
+      "with the chapter's vocabulary. The Chapter Map itself stays content-only.",
+      String(d.prior).slice(0, 24000),
+      "=== END SESSIONS ==="
+    );
+  }
+  return lines.join("\n");
+}
+
 function userMessage(d) {
   var lines = [
     "School: Dr. Dasarathan International School, Coimbatore, Tamil Nadu (ICSE).",
@@ -210,9 +288,11 @@ function userMessage(d) {
 async function callGemini(key, model, d, extraInstruction) {
   // Same file-part building as before: the user message first, then each file
   // inlined as base64. A retry adds a short steering note after the user message.
-  // d.mode === "summary" swaps in the Chapter Summary prompt instead of a session.
+  // d.mode swaps the prompt: "summary" → Chapter Summary, "map" → mind-map
+  // outline, anything else → a session plan.
   var isSummary = d.mode === "summary";
-  var parts = [{ text: isSummary ? summaryUserMessage(d) : userMessage(d) }];
+  var isMap = d.mode === "map";
+  var parts = [{ text: isSummary ? summaryUserMessage(d) : isMap ? mapUserMessage(d) : userMessage(d) }];
   if (extraInstruction) {
     parts.push({ text: extraInstruction });
   }
@@ -224,7 +304,7 @@ async function callGemini(key, model, d, extraInstruction) {
   }
 
   var body = {
-    systemInstruction: { parts: [{ text: FRAMEWORK + "\n\n" + (isSummary ? summaryAddendum(d) : addendum(d)) }] },
+    systemInstruction: { parts: [{ text: FRAMEWORK + "\n\n" + (isSummary ? summaryAddendum(d) : isMap ? mapAddendum(d) : addendum(d)) }] },
     contents: [{ role: "user", parts: parts }],
     // gemini-2.5-flash is a thinking model. Left uncapped it can think for 100s+
     // (a single call hit 142s in testing) and blow past Vercel's 60s limit — the
@@ -348,6 +428,19 @@ function summaryPasses(result) {
   return validateSummary(result.text).ok;
 }
 
+// Gate for the mind-map outline: the Chapter Map header and at least two branches.
+function validateMap(text) {
+  var t = text || "", missing = [];
+  if (!/#\s+Chapter Map\s*:/i.test(t)) { missing.push("chapter map"); }
+  if ((t.match(/^##\s+\d+\.\s+/gm) || []).length < 2) { missing.push("branches"); }
+  return { ok: missing.length === 0, missing: missing };
+}
+function mapPasses(result) {
+  if (!result || !result.text || !result.text.trim()) { return false; }
+  if (result.finishReason && result.finishReason !== "STOP") { return false; }
+  return validateMap(result.text).ok;
+}
+
 module.exports = async function (req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Use POST." });
@@ -388,8 +481,9 @@ module.exports = async function (req, res) {
   d.prior = d.prior || "";
   d.chapterNumber = (d.chapterNumber || "").toString().trim();
   d.chapterName = (d.chapterName || "").toString().trim();
-  d.mode = d.mode === "summary" ? "summary" : "session";
+  d.mode = (d.mode === "summary" || d.mode === "map") ? d.mode : "session";
   var isSummary = d.mode === "summary";
+  var isMap = d.mode === "map";
 
   // ONE Gemini call. We deliberately do NOT auto-retry: a second ~30s call would
   // risk exceeding Vercel's 60s function limit (which the teacher sees as "not
@@ -419,7 +513,8 @@ module.exports = async function (req, res) {
   }
 
   // Quality gate: if the draft is complete and well-formed, ship it clean.
-  if (isSummary ? summaryPasses(first) : planPasses(first, d)) {
+  var passes = isSummary ? summaryPasses(first) : isMap ? mapPasses(first) : planPasses(first, d);
+  if (passes) {
     res.status(200).json({ markdown: first.text, truncated: false, finishReason: first.finishReason });
     return;
   }
@@ -449,4 +544,7 @@ module.exports.userMessage = userMessage;
 module.exports.summaryAddendum = summaryAddendum;
 module.exports.summaryUserMessage = summaryUserMessage;
 module.exports.validateSummary = validateSummary;
+module.exports.mapAddendum = mapAddendum;
+module.exports.mapUserMessage = mapUserMessage;
+module.exports.validateMap = validateMap;
 module.exports.FRAMEWORK = FRAMEWORK;
