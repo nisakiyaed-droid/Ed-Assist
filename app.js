@@ -62,6 +62,85 @@
     });
   }
 
+  // ---- Automatic chapter shrinking -------------------------------------
+  // Vercel caps a request body at ~4.5 MB, so a base64 PDF must stay under ~3 MB.
+  // Small chapters are sent untouched (keeping their text). A large scanned
+  // chapter is rendered page-by-page to right-sized JPEGs in the browser so it
+  // fits, with no work for the teacher. Gemini reads the images just like a PDF.
+  var ASIS_BYTES = 2.8 * 1024 * 1024;   // send the original if the upload is this small
+  var TARGET_BYTES = 2.7 * 1024 * 1024; // budget for the converted images (raw bytes)
+  var HARD_BYTES = 3.4 * 1024 * 1024;   // refuse only if still over this after shrinking
+  var MAX_PAGES = 40;
+
+  function pdfToImageParts(file, onPage) {
+    return file.arrayBuffer().then(function (buf) {
+      return window.pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+    }).then(function (pdf) {
+      var pages = Math.min(pdf.numPages, MAX_PAGES);
+      var parts = [], usedRaw = 0;
+      var canvas = document.createElement("canvas");
+      var ctx = canvas.getContext("2d");
+      function nextPage(i) {
+        if (i > pages) return Promise.resolve(parts);
+        return pdf.getPage(i).then(function (page) {
+          var v1 = page.getViewport({ scale: 1 });
+          var targetW = pages > 18 ? 1000 : 1240;          // fewer pages → sharper
+          var scale = Math.min(targetW / v1.width, 2);
+          var vp = page.getViewport({ scale: scale });
+          canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+          ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+          return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () {
+            // Spread the remaining byte budget over the remaining pages, dropping
+            // JPEG quality only as far as needed to stay within it.
+            var perPage = (TARGET_BYTES - usedRaw) / (pages - i + 1);
+            var q = 0.72, data = canvas.toDataURL("image/jpeg", q);
+            while (data.length * 0.75 > perPage && q > 0.4) { q -= 0.1; data = canvas.toDataURL("image/jpeg", q); }
+            usedRaw += data.length * 0.75;
+            parts.push({ mimeType: "image/jpeg", data: data.split(",")[1] || "" });
+            if (onPage) onPage(i, pages);
+            return nextPage(i + 1);
+          });
+        });
+      }
+      return nextPage(1);
+    });
+  }
+
+  // Turn the chosen files into inline parts the server can send to Gemini,
+  // shrinking large PDFs first. onPrep(label) reports progress.
+  function prepareFiles(files, onPrep) {
+    var total = 0, i;
+    for (i = 0; i < files.length; i++) total += files[i].size;
+    if (total <= ASIS_BYTES) {                 // small enough — keep the original
+      var jobs = [];
+      for (i = 0; i < files.length; i++) jobs.push(fileToInline(files[i]));
+      return Promise.all(jobs);
+    }
+    if (!window.pdfjsLib) {                     // engine missing — fall back to the old limit
+      return Promise.reject(new Error("Your file is " + (total / 1048576).toFixed(1) +
+        " MB. Please use a chapter PDF under 3 MB."));
+    }
+    if (onPrep) onPrep("Preparing your chapter…");
+    var parts = [], idx = 0;
+    function nextFile() {
+      if (idx >= files.length) {
+        var raw = parts.reduce(function (a, p) { return a + (p.data ? p.data.length * 0.75 : 0); }, 0);
+        if (raw > HARD_BYTES) {
+          return Promise.reject(new Error("This chapter is very large even after shrinking. " +
+            "Please upload fewer pages (just the one chapter) and try again."));
+        }
+        return Promise.resolve(parts);
+      }
+      var f = files[idx++];
+      var isPdf = /pdf/i.test(f.type) || /\.pdf$/i.test(f.name);
+      var step = isPdf
+        ? pdfToImageParts(f, function (pg, n) { if (onPrep) onPrep("Preparing your chapter… page " + pg + " of " + n); })
+        : fileToInline(f).then(function (p) { return [p]; });
+      return step.then(function (ps) { parts = parts.concat(ps); return nextFile(); });
+    }
+    return nextFile();
+  }
+
   // ---- Status + state ---------------------------------------------------
   function setStatus(text, kind) {
     var s = el("genStatus");
@@ -160,15 +239,6 @@
     if (!files || !files.length) { field.classList.add("invalid"); el("chapterFile").focus(); return; }
     field.classList.remove("invalid");
 
-    var total = 0;
-    for (var i = 0; i < files.length; i++) total += files[i].size;
-    if (total > MAX_BYTES) {
-      el("planResult").classList.remove("hidden"); el("planBody").innerHTML = ""; showToolbar(false);
-      setStatus("Your file is " + (total / 1048576).toFixed(1) + " MB. Please keep it under 3 MB — try a smaller or shorter chapter PDF.", "warn");
-      el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-
     saveLastChoice();                         // remember grade / subject / sessions
     var N = parseInt(el("sessions").value, 10) || 1;
     var base = {
@@ -177,10 +247,20 @@
       chapterName: el("chapterName").value.trim()
     };
 
-    var jobs = [];
-    for (var j = 0; j < files.length; j++) jobs.push(fileToInline(files[j]));
-    Promise.all(jobs).then(function (fileParts) {
-      runGeneration(base, fileParts);
+    // Show the output area with a "preparing" bar while we shrink a big chapter.
+    var btn = el("generateBtn"); btn.disabled = true;
+    el("planResult").classList.remove("hidden");
+    el("planBody").innerHTML = ""; showToolbar(false);
+    el("genStatus").classList.add("hidden");
+    showProgress(true); setProgress(0, 1, "Reading your chapter…");
+    el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
+
+    prepareFiles(files, function (label) { setProgress(0, 1, label); }).then(function (fileParts) {
+      btn.disabled = false;
+      runGeneration(base, fileParts);         // takes over the progress bar
+    }).catch(function (err) {
+      btn.disabled = false; showProgress(false);
+      setStatus((err && err.message) || "Sorry, that chapter could not be read. Please try another PDF.", "warn");
     });
   }
 
@@ -823,6 +903,9 @@
 
   // ---- Wiring -----------------------------------------------------------
   document.addEventListener("DOMContentLoaded", function () {
+    if (window.pdfjsLib) {                     // point pdf.js at its vendored worker
+      try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdf.worker.min.js"; } catch (e) {}
+    }
     loadLastChoice();
     initLoginGate();
     el("loginForm").addEventListener("submit", handleLogin);
