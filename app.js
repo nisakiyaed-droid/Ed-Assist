@@ -915,7 +915,7 @@
     var opt = {
       margin: [10, 10, 12, 10],
       filename: pdfFilename(doc),
-      image: { type: "jpeg", quality: 0.96 },
+      image: { type: "jpeg", quality: 0.85 },   // ~half the file size, still crisp for text
       // windowWidth pins the capture to the document's own width (760) on every
       // device, so a phone's narrow screen can't trigger the mobile layout or clip
       // the right edge. Must equal the .pdf-doc width exactly — 800 left slack that

@@ -435,8 +435,9 @@ function validatePlan(text, d) {
 
   // A '# ' title line (markdown H1) must exist.
   if (!/^#\s+/m.test(t)) { missing.push("title"); }
-  // The running chapter-progress note.
-  if (t.indexOf("Chapter Progress So Far:") === -1) { missing.push("progress"); }
+  // The running chapter-progress note — only required from Session 2 onward
+  // (Session 1 deliberately omits it).
+  if (String(d && d.sessionNo) !== "1" && t.indexOf("Chapter Progress So Far:") === -1) { missing.push("progress"); }
   // All three Parts.
   if (t.indexOf("## Part One") === -1) { missing.push("Part One"); }
   if (t.indexOf("## Part Two") === -1) { missing.push("Part Two"); }
@@ -445,7 +446,7 @@ function validatePlan(text, d) {
   // Match what the RENDERER accepts, not an exact string, so we don't retry a
   // perfectly good plan over a tiny heading variation ("### Story —" etc.).
   if (!/###\s+evening\s+post/i.test(t)) { missing.push("Evening Post"); }
-  if (!/###\s+(the\s+)?story\b/i.test(t)) { missing.push("Story"); }
+  if (!/###[^\n]*\bstory\b/i.test(t)) { missing.push("Story"); }
   // At least three timed in-class steps like '### 10 min ...'.
   var timed = t.match(/###\s+\d+\s*min/g);
   if (!timed || timed.length < 3) { missing.push("timed steps"); }
@@ -461,12 +462,11 @@ function validatePlan(text, d) {
     }
   }
   if (!hasTable) { missing.push("misconceptions table"); }
-  // Grade consistency: the requested grade must appear and no OTHER grade number.
-  var want = d && d.grade ? String(d.grade) : "";
-  var wantNo = (want.match(/Grade\s+(\d+)/) || [])[1];
-  if (want && t.indexOf(want) === -1) {
-    missing.push("grade");
-  } else if (wantNo) {
+  // Grade consistency: the plan must not name a DIFFERENT grade. We do NOT
+  // require the literal "Grade N" string to appear (the plan format does not
+  // print it), only that no conflicting grade number is mentioned.
+  var wantNo = (String(d && d.grade ? d.grade : "").match(/Grade\s+(\d+)/) || [])[1];
+  if (wantNo) {
     var gm = t.match(/Grade\s+(\d+)/g) || [];
     for (var g = 0; g < gm.length; g++) {
       var n = (gm[g].match(/Grade\s+(\d+)/) || [])[1];
