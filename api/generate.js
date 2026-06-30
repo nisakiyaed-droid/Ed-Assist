@@ -377,12 +377,14 @@ async function callGemini(key, model, d, extraInstruction) {
     systemInstruction: { parts: [{ text: FRAMEWORK + "\n\n" + (isSummary ? summaryAddendum(d) : isMap ? mapAddendum(d) : addendum(d)) }] },
     contents: [{ role: "user", parts: parts }],
     // gemini-2.5-flash is a thinking model. Left uncapped it can think for 100s+
-    // (a single call hit 142s in testing) and blow past Vercel's 60s limit — the
-    // teacher sees "not connected". thinkingBudget caps the thinking so each call
-    // reliably finishes in ~30s, while maxOutputTokens 20000 still leaves ~14k for
-    // the full plan (thinking is capped, so it no longer crowds out the output and
-    // causes truncation). Lower temperature → steadier, more consistent plans.
-    generationConfig: { temperature: 0.5, maxOutputTokens: 16000, thinkingConfig: { thinkingBudget: 6000 } }
+    // (a single call hit 142s in testing) and blow past Vercel's 60s limit. With
+    // the deeper Part B prompt AND a large image chapter, a 6000-token thinking
+    // budget could consume the whole output budget and return NO answer text
+    // ("No plan text came back"). So: trim thinking to 3000 (the prompt is highly
+    // structured, so heavy free reasoning is not needed) and raise the output cap
+    // to 24000 so there is ample room for the full plan after thinking. Net: each
+    // call is faster and reliably emits the plan.
+    generationConfig: { temperature: 0.5, maxOutputTokens: 24000, thinkingConfig: { thinkingBudget: 3000 } }
   };
 
   var url = "https://generativelanguage.googleapis.com/v1beta/models/" +
@@ -414,7 +416,7 @@ async function callGemini(key, model, d, extraInstruction) {
     // chars. If the model ran away (seen intermittently at 200k-400k chars), do
     // NOT return the giant string — it would make a huge broken PDF. Fail cleanly
     // so the handler surfaces a friendly "Make again".
-    if (text.length > 30000) {
+    if (text.length > 42000) {
       return { ok: false, status: gres.status, text: "", finishReason: cand && cand.finishReason, errorMessage: "The plan came out garbled. Please tap \"Make again\".", blockReason: null };
     }
     return { ok: true, status: gres.status, text: text, finishReason: cand && cand.finishReason, errorMessage: null, blockReason: null };
@@ -577,7 +579,7 @@ module.exports = async function (req, res) {
   // Guard against a rare degenerate run where the model loops. A normal one-
   // session plan is ~12-14k chars, so anything past 28k is runaway garbage —
   // shipping it makes a giant broken PDF, so treat it as no usable plan.
-  if (draft.length > 28000) {
+  if (draft.length > 40000) {
     res.status(502).json({ error: "The plan came out garbled. Please tap \"Make again\"." });
     return;
   }
