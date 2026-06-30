@@ -29,6 +29,18 @@ module.exports = async function (req, res) {
     return;
   }
 
+  // Lock so two overlapping calls (e.g. a backgrounded request plus a reopen)
+  // never generate the same piece twice. The lock self-expires after 75s in case
+  // a function dies mid-step.
+  var now = Date.now();
+  if (meta.lockedAt && (now - meta.lockedAt) < 75000) {
+    res.status(200).json({ status: "running", step: meta.step, total: meta.total, busy: true, label: label(meta.step, meta.sessions) });
+    return;
+  }
+  meta.lockedAt = now;
+  try { await kv.set("job:" + jobId, JSON.stringify(meta), 6 * 60 * 60); }
+  catch (e) { res.status(503).json({ error: "Couldn't reach the store. Please try again." }); return; }
+
   var N = meta.sessions, step = meta.step;
   var mode = step < N ? "session" : (step === N ? "summary" : "map");
 
@@ -59,7 +71,7 @@ module.exports = async function (req, res) {
   if (mode === "session" && (!result.ok || !text)) {
     meta.status = "error";
     meta.error = (result && result.errorMessage) || "A session came back empty. Please make this chapter again.";
-    meta.updatedAt = Date.now();
+    meta.lockedAt = null; meta.updatedAt = Date.now();
     try { await kv.set("job:" + jobId, JSON.stringify(meta), 6 * 60 * 60); } catch (e) {}
     res.status(200).json({ status: "error", step: step, total: meta.total, error: meta.error });
     return;
@@ -74,7 +86,7 @@ module.exports = async function (req, res) {
 
   meta.step = step + 1;
   if (meta.step >= meta.total) { meta.status = "done"; }
-  meta.updatedAt = Date.now();
+  meta.lockedAt = null; meta.updatedAt = Date.now();
   try { await kv.set("job:" + jobId, JSON.stringify(meta), 6 * 60 * 60); }
   catch (e) { res.status(503).json({ error: "Couldn't save progress. Please try again." }); return; }
 

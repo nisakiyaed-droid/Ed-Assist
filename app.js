@@ -257,7 +257,7 @@
 
     prepareFiles(files, function (label) { setProgress(0, 1, label); }).then(function (fileParts) {
       btn.disabled = false;
-      runGeneration(base, fileParts);         // takes over the progress bar
+      runGenerationBg(base, fileParts);       // takes over the progress bar
     }).catch(function (err) {
       btn.disabled = false; showProgress(false);
       setStatus((err && err.message) || "Sorry, that chapter could not be read. Please try another PDF.", "warn");
@@ -268,11 +268,136 @@
   // file parts so we never read the file from disk again.
   function regenerate() {
     if (!lastRun) return;
-    runGeneration(lastRun.base, lastRun.fileParts);
+    runGenerationBg(lastRun.base, lastRun.fileParts);
   }
 
-  // Core generation flow — used by both Generate and "Make again".
-  function runGeneration(base, fileParts) {
+  // ---- Background generation (server-side job) -------------------------
+  // The chapter is uploaded ONCE to the server, which writes the plan piece by
+  // piece into the Redis store. Progress survives a page close: on reopen we
+  // pick the job back up (or show the finished plan). Falls back to the older
+  // in-browser flow only if the server says background mode isn't configured.
+  var JOB_KEY = "ddis.job";
+  function saveJob(o) { try { o ? localStorage.setItem(JOB_KEY, JSON.stringify(o)) : localStorage.removeItem(JOB_KEY); } catch (e) {} }
+  function loadJob() { try { return JSON.parse(localStorage.getItem(JOB_KEY) || "null"); } catch (e) { return null; } }
+  function apiPost(path, payload) {
+    return fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+      .then(function (res) { return res.text().then(function (raw) { var j; try { j = JSON.parse(raw); } catch (e) { j = null; } return { status: res.status, ok: res.ok, json: j }; }); });
+  }
+  function apiGet(path) {
+    return fetch(path).then(function (res) { return res.text().then(function (raw) { var j; try { j = JSON.parse(raw); } catch (e) { j = null; } return { status: res.status, ok: res.ok, json: j }; }); });
+  }
+  function resetGenBtn() { var b = el("generateBtn"); b.disabled = false; b.textContent = "Make my plan"; }
+
+  function runGenerationBg(base, fileParts) {
+    var N = base.sessions, total = N + 2;
+    lastRun = { base: base, fileParts: fileParts };
+    var btn = el("generateBtn"); btn.disabled = true; btn.textContent = "Making your plan…";
+    currentSessions = []; summaryMarkdown = ""; lastMarkdown = "";
+    chapterMapData = null; dailyMapData = []; dailyPng = [];
+    el("planResult").classList.remove("hidden");
+    el("planBody").innerHTML = ""; showToolbar(false);
+    el("genStatus").classList.add("hidden");
+    showProgress(true); setProgress(0, total, "Saving your chapter…");
+    el("planTitle").textContent = "Your lesson plan";
+    setMeta([base.grade, base.subject, N + " session" + (N > 1 ? "s" : "")]);
+    el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
+
+    apiPost("api/start", {
+      grade: base.grade, subject: base.subject, sessions: N,
+      chapterNumber: base.chapterNumber, chapterName: base.chapterName,
+      password: getPw(), files: fileParts
+    }).then(function (r) {
+      if (r.status === 401) { setPw(""); showGate(true); showProgress(false); resetGenBtn(); return; }
+      if (r.status === 429 && r.json && r.json.limitReached) { showProgress(false); setStatus(r.json.error, "warn"); resetGenBtn(); return; }
+      if (r.status === 503) { return runGenerationSync(base, fileParts); }   // background not set up → old flow
+      if (!r.ok || !r.json || !r.json.jobId) {
+        showProgress(false); setStatus((r.json && r.json.error) || "Couldn't start the plan. Please try again.", "error"); resetGenBtn(); return;
+      }
+      saveJob({ jobId: r.json.jobId, grade: base.grade, subject: base.subject, sessions: N, total: r.json.total });
+      driveJob(r.json.jobId, r.json.total);
+    }, function () {
+      showProgress(false); setStatus("Couldn't reach the plan maker. Please check your internet and try again.", "error"); resetGenBtn();
+    });
+  }
+
+  // Keep calling /api/step (each call writes one piece on the server, ~half a
+  // minute) until the job is done. Tolerant of slow mobile connections.
+  function driveJob(jobId, total) {
+    var lowQ = false, curStep = 0, stopped = false;
+    function step() {
+      if (stopped) return;
+      apiPost("api/step", { job: jobId }).then(function (r) {
+        if (stopped) return;
+        var j = r.json || {};
+        if (r.status === 404 || j.status === "missing") {
+          saveJob(null); showProgress(false); setStatus("This plan expired before it finished. Please make it again.", "warn"); resetGenBtn(); return;
+        }
+        if (j.busy) { setProgress(curStep, total, "Working… please keep going"); setTimeout(step, 5000); return; }
+        if (!r.ok && !j.status) { setProgress(curStep, total, "Slow connection — trying again…"); setTimeout(step, 3000); return; }
+        if (j.lowQuality) lowQ = true;
+        if (j.step != null) curStep = j.step;
+        if (j.status === "error") { saveJob(null); showProgress(false); setStatus((j.error || "Something went wrong.") + " Please tap Make again.", "error"); resetGenBtn(); return; }
+        setProgress(curStep, total, (j.label || "Working…") + " — you can leave this page and come back");
+        if (j.status === "done") { finishJob(jobId, lowQ); return; }
+        step();                                  // straight on to the next piece
+      }, function () {
+        if (stopped) return;
+        setProgress(curStep, total, "Slow connection — trying again…"); setTimeout(step, 3000);
+      });
+    }
+    step();
+  }
+
+  function finishJob(jobId, lowQ) {
+    apiGet("api/status?job=" + encodeURIComponent(jobId)).then(function (r) {
+      var j = r.json || {};
+      if (j.status === "done" && j.results) { renderResults(j.results, lowQ || j.lowQuality); saveJob(null); }
+      else { showProgress(false); setStatus("Finished, but couldn't load the files. Please reopen the app.", "warn"); }
+      resetGenBtn();
+    }, function () { showProgress(false); setStatus("Finished, but couldn't load. Please reopen the app.", "warn"); resetGenBtn(); });
+  }
+
+  // Populate the plan state from a finished job and render exactly as the old
+  // flow did (reusing renderSessions, the folder, and the maps).
+  function renderResults(results, lowQ) {
+    currentSessions = (results.sessions || []).slice();
+    summaryMarkdown = results.summary || "";
+    chapterMapData = null; dailyMapData = []; dailyPng = [];
+    var parsed = window.MapRender ? parseMapText(results.map || "") : { branches: [], daily: [] };
+    if (parsed.branches && parsed.branches.length) chapterMapData = { title: parsed.title, branches: parsed.branches };
+    dailyMapData = parsed.daily || [];
+    var jobs = (window.MapRender ? dailyMapData : []).map(function (d, i) {
+      if (!d || !(d.ideas || []).length) return Promise.resolve();
+      return svgObjToImg(window.MapRender.buildDailyMapSVG(d)).then(function (png) { dailyPng[i] = png; }, function () {});
+    });
+    Promise.all(jobs).then(function () {
+      showProgress(false);
+      renderSessions(!!lowQ);
+      showToolbar(true);
+    });
+  }
+
+  // On load, pick up a job left running (or finished) on a previous visit.
+  function resumeJob() {
+    var job = loadJob();
+    if (!job || !job.jobId) return;
+    var total = job.total || (job.sessions + 2);
+    apiGet("api/status?job=" + encodeURIComponent(job.jobId)).then(function (r) {
+      var j = r.json || {};
+      if (r.status === 404 || j.status === "missing" || j.status === "error") { saveJob(null); return; }
+      el("planResult").classList.remove("hidden");
+      el("planTitle").textContent = "Your lesson plan";
+      setMeta([job.grade, job.subject, job.sessions + " session" + (job.sessions > 1 ? "s" : "")]);
+      el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
+      if (j.status === "done" && j.results) { renderResults(j.results, j.lowQuality); saveJob(null); return; }
+      el("planBody").innerHTML = ""; showToolbar(false);
+      showProgress(true); setProgress(j.step || 0, total, (j.label || "Picking up where it left off…"));
+      driveJob(job.jobId, total);
+    }, function () { /* offline — try again next load */ });
+  }
+
+  // Core generation flow (FALLBACK) — used only if background mode is off.
+  function runGenerationSync(base, fileParts) {
     var N = base.sessions;
     var STEPS = N + 2;                         // N sessions + chapter summary + mind maps
     lastRun = { base: base, fileParts: fileParts }; // cache for "Make again"
@@ -908,6 +1033,7 @@
     }
     loadLastChoice();
     initLoginGate();
+    resumeJob();                               // pick up a chapter still cooking from a previous visit
     el("loginForm").addEventListener("submit", handleLogin);
     el("chapter-form").addEventListener("submit", handleSubmit);
     el("regenBtn").addEventListener("click", regenerate);
