@@ -346,6 +346,10 @@ input[type="file"]:hover{border-color:var(--brand);}
   .file-acts{justify-content:flex-end;}
 }
 
+/* Start-over button — lets a teacher abandon a slow/stuck job. */
+.cancel-btn{margin:4px 0 14px;}
+.cancel-btn.hidden{display:none;}
+
 /* Retry banner — one session paused and can be retried on its own. */
 .retry-banner{background:#fff7ef; border:1px solid #f3ddc4; color:#8a5312;
   border-radius:10px; padding:13px 15px; margin:0 0 16px; font-size:14px; line-height:1.5;

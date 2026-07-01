@@ -286,12 +286,28 @@
   function apiGet(path) {
     return fetch(path).then(function (res) { return res.text().then(function (raw) { var j; try { j = JSON.parse(raw); } catch (e) { j = null; } return { status: res.status, ok: res.ok, json: j }; }); });
   }
-  function resetGenBtn() { var b = el("generateBtn"); b.disabled = false; b.textContent = "Make my plan"; }
+  function resetGenBtn() { var b = el("generateBtn"); b.disabled = false; b.textContent = "Make my plan"; showCancel(false); }
+
+  // A run token: every generation/resume captures the current value; bumping it
+  // makes any in-flight poller stop. "Start over" bumps it to escape a job that
+  // is taking too long, so the teacher is never trapped watching a stalled plan.
+  var genRun = 0;
+  function showCancel(on) { var c = el("cancelBtn"); if (c) c.classList.toggle("hidden", !on); }
+  function cancelGeneration() {
+    genRun++;                          // stop any running poller/driver loop
+    saveJob(null);
+    showProgress(false); hideRetryBanner();
+    el("planBody").innerHTML = ""; showToolbar(false);
+    setStatus("Stopped. You can make a new plan now.", "warn");
+    resetGenBtn();
+  }
 
   function runGenerationBg(base, fileParts) {
     var N = base.sessions, total = N + 2;
+    genRun++;                                  // fresh run; invalidates old pollers
     lastRun = { base: base, fileParts: fileParts };
     var btn = el("generateBtn"); btn.disabled = true; btn.textContent = "Making your plan…";
+    showCancel(true);
     currentSessions = []; summaryMarkdown = ""; lastMarkdown = "";
     chapterMapData = null; dailyMapData = []; dailyPng = [];
     el("planResult").classList.remove("hidden");
@@ -325,11 +341,12 @@
   // step from the browser (which needs the page open).
   function driveJob(jobId, total, selfRunning) {
     if (selfRunning) { return pollJob(jobId, total); }
-    var lowQ = false, curStep = 0, stopped = false;
+    showCancel(true);
+    var lowQ = false, curStep = 0, myRun = genRun;
     function step() {
-      if (stopped) return;
+      if (myRun !== genRun) return;
       apiPost("api/step", { job: jobId }).then(function (r) {
-        if (stopped) return;
+        if (myRun !== genRun) return;
         var j = r.json || {};
         if (r.status === 404 || j.status === "missing") {
           saveJob(null); showProgress(false); setStatus("This plan expired before it finished. Please make it again.", "warn"); resetGenBtn(); return;
@@ -344,7 +361,7 @@
         if (j.status === "done") { finishJob(jobId, lowQ); return; }
         step();                                  // straight on to the next piece
       }, function () {
-        if (stopped) return;
+        if (myRun !== genRun) return;
         setProgress(curStep, total, "Slow connection — trying again…"); setTimeout(step, 3000);
       });
     }
@@ -354,11 +371,12 @@
   // Self-running mode: the server chains its own steps, so we only watch. The
   // teacher can fully close the app; on reopen the finished plan is waiting.
   function pollJob(jobId, total) {
-    var lowQ = false, curStep = 0, sameFor = 0, stopped = false;
+    showCancel(true);
+    var lowQ = false, curStep = 0, sameFor = 0, myRun = genRun;
     function poll() {
-      if (stopped) return;
+      if (myRun !== genRun) return;
       apiGet("api/status?job=" + encodeURIComponent(jobId)).then(function (r) {
-        if (stopped) return;
+        if (myRun !== genRun) return;
         var j = r.json || {};
         if (r.status === 404 || j.status === "missing") {
           saveJob(null); showProgress(false); setStatus("This plan expired before it finished. Please make it again.", "warn"); resetGenBtn(); return;
@@ -373,7 +391,7 @@
         setProgress(curStep, total, (j.label || "Working…") + " — you can close the app; it will keep going");
         if (sameFor >= 16) { sameFor = 0; apiPost("api/step", { job: jobId }).catch(function () {}); }
         setTimeout(poll, 5000);
-      }, function () { if (!stopped) setTimeout(poll, 5000); });
+      }, function () { if (myRun === genRun) setTimeout(poll, 5000); });
     }
     poll();
   }
@@ -412,6 +430,7 @@
   function resumeJob() {
     var job = loadJob();
     if (!job || !job.jobId) return;
+    genRun++;
     var total = job.total || (job.sessions + 2);
     apiGet("api/status?job=" + encodeURIComponent(job.jobId)).then(function (r) {
       var j = r.json || {};
@@ -434,10 +453,12 @@
     var STEPS = N + 2;                         // N sessions + chapter summary + mind maps
     lastRun = { base: base, fileParts: fileParts }; // cache for "Make again"
 
+    genRun++;
     var btn = el("generateBtn");
     btn.disabled = true;
     var oldLabel = btn.textContent;
     btn.textContent = "Making your plan…";
+    showCancel(true);
     el("planResult").classList.remove("hidden");
     el("planBody").innerHTML = "";            // the plan itself stays hidden until ALL sessions are done
     currentSessions = []; summaryMarkdown = ""; lastMarkdown = "";
@@ -531,7 +552,7 @@
       }
       setStatus(msg, "error");
     }).then(function () {
-      btn.disabled = false; btn.textContent = oldLabel;
+      btn.disabled = false; btn.textContent = oldLabel; showCancel(false);
     });
   }
 
@@ -1073,9 +1094,10 @@
     if (rb) rb.addEventListener("click", function () { resumeStep(jobId, sessionNo); });
   }
   function resumeStep(jobId, sessionNo) {
+    genRun++;
     var job = loadJob() || {};
     var total = job.total || 0, selfRunning = !!job.selfRunning;
-    hideRetryBanner();
+    hideRetryBanner(); showCancel(true);
     showProgress(true); setProgress(0, total, "Trying that session again…");
     var btn = el("generateBtn"); btn.disabled = true; btn.textContent = "Making your plan…";
     apiPost("api/step", { job: jobId, resume: true }).then(function () {
@@ -1177,6 +1199,7 @@
     el("loginForm").addEventListener("submit", handleLogin);
     el("chapter-form").addEventListener("submit", handleSubmit);
     el("regenBtn").addEventListener("click", regenerate);
+    el("cancelBtn").addEventListener("click", cancelGeneration);
     el("filesList").addEventListener("click", onFileAct);
     el("libRefresh").addEventListener("click", loadLibrary);
     el("libList").addEventListener("click", onLibAct);
