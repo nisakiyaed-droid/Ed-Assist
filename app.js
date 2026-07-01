@@ -313,16 +313,18 @@
       if (!r.ok || !r.json || !r.json.jobId) {
         showProgress(false); setStatus((r.json && r.json.error) || "Couldn't start the plan. Please try again.", "error"); resetGenBtn(); return;
       }
-      saveJob({ jobId: r.json.jobId, grade: base.grade, subject: base.subject, sessions: N, total: r.json.total });
-      driveJob(r.json.jobId, r.json.total);
+      saveJob({ jobId: r.json.jobId, grade: base.grade, subject: base.subject, sessions: N, total: r.json.total, selfRunning: !!r.json.selfRunning });
+      driveJob(r.json.jobId, r.json.total, !!r.json.selfRunning);
     }, function () {
       showProgress(false); setStatus("Couldn't reach the plan maker. Please check your internet and try again.", "error"); resetGenBtn();
     });
   }
 
-  // Keep calling /api/step (each call writes one piece on the server, ~half a
-  // minute) until the job is done. Tolerant of slow mobile connections.
-  function driveJob(jobId, total) {
+  // Drive a job to completion. When the server self-runs (QStash configured) the
+  // app just POLLS status and can be closed entirely; otherwise it drives each
+  // step from the browser (which needs the page open).
+  function driveJob(jobId, total, selfRunning) {
+    if (selfRunning) { return pollJob(jobId, total); }
     var lowQ = false, curStep = 0, stopped = false;
     function step() {
       if (stopped) return;
@@ -346,6 +348,32 @@
       });
     }
     step();
+  }
+
+  // Self-running mode: the server chains its own steps, so we only watch. The
+  // teacher can fully close the app; on reopen the finished plan is waiting.
+  function pollJob(jobId, total) {
+    var lowQ = false, curStep = 0, sameFor = 0, stopped = false;
+    function poll() {
+      if (stopped) return;
+      apiGet("api/status?job=" + encodeURIComponent(jobId)).then(function (r) {
+        if (stopped) return;
+        var j = r.json || {};
+        if (r.status === 404 || j.status === "missing") {
+          saveJob(null); showProgress(false); setStatus("This plan expired before it finished. Please make it again.", "warn"); resetGenBtn(); return;
+        }
+        if (j.lowQuality) lowQ = true;
+        if (j.status === "error") { saveJob(null); showProgress(false); setStatus((j.error || "Something went wrong.") + " Please tap Make again.", "error"); resetGenBtn(); return; }
+        if (j.status === "done" && j.results) { renderResults(j.results, lowQ || j.lowQuality); saveJob(null); resetGenBtn(); return; }
+        // Track stalls: if nothing has advanced for ~80s, nudge a step in case a
+        // trigger was lost, then keep polling.
+        if (j.step === curStep) { sameFor++; } else { curStep = j.step || 0; sameFor = 0; }
+        setProgress(curStep, total, (j.label || "Working…") + " — you can close the app; it will keep going");
+        if (sameFor >= 16) { sameFor = 0; apiPost("api/step", { job: jobId }).catch(function () {}); }
+        setTimeout(poll, 5000);
+      }, function () { if (!stopped) setTimeout(poll, 5000); });
+    }
+    poll();
   }
 
   function finishJob(jobId, lowQ) {
@@ -392,7 +420,7 @@
       if (j.status === "done" && j.results) { renderResults(j.results, j.lowQuality); saveJob(null); return; }
       el("planBody").innerHTML = ""; showToolbar(false);
       showProgress(true); setProgress(j.step || 0, total, (j.label || "Picking up where it left off…"));
-      driveJob(job.jobId, total);
+      driveJob(job.jobId, total, !!job.selfRunning);
     }, function () { /* offline — try again next load */ });
   }
 

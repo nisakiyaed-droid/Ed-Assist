@@ -2,6 +2,7 @@
 // Redis store, and return a job id. The browser can then close; /api/step
 // advances the job one piece at a time and /api/status reports progress.
 var kv = require("./_kv.js");
+var qstash = require("./_qstash.js");
 var crypto = require("crypto");
 
 var DAILY_GENERATION_LIMIT = 30;        // school-wide successful generations per IST day
@@ -66,6 +67,8 @@ module.exports = async function (req, res) {
   var N = parseInt(d.sessions, 10) || 4;
   var jobId = crypto.randomUUID();
   var ttl = JOB_TTL;
+  var selfRunning = qstash.configured();
+  var base = qstash.baseUrl(req);
 
   // Store each chapter page on its own key (each well under the 1 MB value limit).
   try {
@@ -77,7 +80,7 @@ module.exports = async function (req, res) {
       grade: d.grade || "Grade 3", subject: d.subject || "Environmental Studies",
       chapterNumber: (d.chapterNumber || "").toString().trim(),
       chapterName: (d.chapterName || "").toString().trim(),
-      pageCount: files.length,
+      pageCount: files.length, base: base,
       results: { sessions: [], summary: "", map: "" },
       lowQuality: false, error: null, updatedAt: Date.now()
     };
@@ -87,7 +90,11 @@ module.exports = async function (req, res) {
     return;
   }
 
-  res.status(200).json({ jobId: jobId, total: N + 2 });
+  // If QStash is configured, kick off the self-running chain so the chapter
+  // finishes even with the browser closed. Otherwise the browser drives it.
+  if (selfRunning) { await qstash.publish(base + "/api/step", { job: jobId }); }
+
+  res.status(200).json({ jobId: jobId, total: N + 2, selfRunning: selfRunning });
 };
 
 module.exports.config = { maxDuration: 30 };

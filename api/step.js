@@ -5,6 +5,7 @@
 // because everything lives in the Redis store.
 var kv = require("./_kv.js");
 var gen = require("./generate.js");
+var qstash = require("./_qstash.js");
 
 function label(step, N) {
   if (step < N) return "Writing session " + (step + 1) + " of " + N + "…";
@@ -89,6 +90,13 @@ module.exports = async function (req, res) {
   meta.lockedAt = null; meta.updatedAt = Date.now();
   try { await kv.set("job:" + jobId, JSON.stringify(meta), 6 * 60 * 60); }
   catch (e) { res.status(503).json({ error: "Couldn't save progress. Please try again." }); return; }
+
+  // Chain the next piece via QStash so the job finishes even if the browser is
+  // closed. (The busy/lock path above never reaches here, so we never double up.)
+  if (meta.status !== "done" && qstash.configured()) {
+    var base = meta.base || qstash.baseUrl(req);
+    await qstash.publish(base + "/api/step", { job: jobId });
+  }
 
   res.status(200).json({
     status: meta.status, step: meta.step, total: meta.total,
