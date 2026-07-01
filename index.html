@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,500;1,500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260629p" />
+  <link rel="stylesheet" href="styles.css?v=20260701a" />
 </head>
 <body>
   <!-- LOGIN GATE (shared school password) -->
@@ -117,6 +117,9 @@
           </div>
           <div id="genStatus" class="gen-status hidden" role="status" aria-live="assertive"></div>
 
+          <!-- RETRY BANNER — shown when one session paused and needs another try -->
+          <div id="retryBanner" class="retry-banner hidden" role="alert"></div>
+
           <!-- CHAPTER FOLDER — each file can be downloaded or shared on its own -->
           <div id="planFiles" class="plan-files hidden">
             <div class="files-head">Your files</div>
@@ -126,6 +129,20 @@
 
           <div id="planBody" class="rendered" aria-live="polite"></div>
         </div>
+      </div>
+    </section>
+
+    <!-- MY CHAPTERS — the shared, saved library of finished plans -->
+    <section class="library" id="library">
+      <div class="panel">
+        <div class="library-head">
+          <h2 style="text-align:left">My Chapters</h2>
+          <button type="button" class="btn small ghost" id="libRefresh">Refresh</button>
+        </div>
+        <p class="subtle">Every finished chapter is saved here for the whole school. Open one to download or share it again.</p>
+        <div id="libList" class="lib-list"></div>
+        <p id="libEmpty" class="subtle hidden">No saved chapters yet. Make your first plan above and it will appear here.</p>
+        <p id="libLoading" class="subtle hidden">Loading saved chapters…</p>
       </div>
     </section>
   </main>
@@ -139,7 +156,7 @@
 
   <script src="assets/vendor/html2pdf.bundle.min.js"></script>
   <script src="assets/vendor/pdf.min.js"></script>
-  <script src="mapRender.js?v=20260629p"></script>
-  <script src="app.js?v=20260629p"></script>
+  <script src="mapRender.js?v=20260701a"></script>
+  <script src="app.js?v=20260701a"></script>
 </body>
 </html>

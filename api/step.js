@@ -6,6 +6,9 @@
 var kv = require("./_kv.js");
 var gen = require("./generate.js");
 var qstash = require("./_qstash.js");
+var lib = require("./_library.js");
+
+var JOB_TTL = 6 * 60 * 60;
 
 function label(step, N) {
   if (step < N) return "Writing session " + (step + 1) + " of " + N + "…";
@@ -17,8 +20,11 @@ module.exports = async function (req, res) {
   var haveWriter = process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY;
   if (!haveWriter || !kv.configured()) { res.status(503).json({ error: "Background mode is not set up." }); return; }
 
-  var jobId = (req.query && req.query.job) ||
-    (req.body && (typeof req.body === "string" ? "" : req.body.job)) || "";
+  var body = {};
+  try { body = (req.body && typeof req.body !== "string") ? req.body : JSON.parse((req.body || "{}")); }
+  catch (e) { body = {}; }
+  var jobId = (req.query && req.query.job) || body.job || "";
+  var resume = !!((req.query && req.query.resume) || body.resume);
   if (!jobId) { res.status(400).json({ error: "Missing job id." }); return; }
 
   var meta;
@@ -28,6 +34,17 @@ module.exports = async function (req, res) {
   if (meta.status === "done" || meta.status === "error") {
     res.status(200).json({ status: meta.status, step: meta.step, total: meta.total, error: meta.error });
     return;
+  }
+  // Paused = a session used up its one auto-retry and is waiting for the teacher
+  // to tap "Retry this session". Every finished session is kept. A plain step or
+  // a stray queue retry just reports the paused state; only an explicit resume
+  // (the button) clears it and tries that session again with a fresh retry.
+  if (meta.status === "paused") {
+    if (!resume) {
+      res.status(200).json({ status: "paused", step: meta.step, total: meta.total, failedStep: meta.step, error: meta.error, lowQuality: meta.lowQuality });
+      return;
+    }
+    meta.status = "running"; meta.attempts = 0; meta.error = null;
   }
 
   // Lock so two overlapping calls (e.g. a backgrounded request plus a reopen)
@@ -69,11 +86,28 @@ module.exports = async function (req, res) {
   // A session must produce real text; the summary and map are optional bonuses.
   var text = (result && result.text || "").trim();
   if (mode === "session" && (!result.ok || !text)) {
-    meta.status = "error";
-    meta.error = (result && result.errorMessage) || "A session came back empty. Please make this chapter again.";
+    var why = (result && result.errorMessage) || "A session came back empty.";
+    // First failure of this session: try it ONE more time automatically. We keep
+    // the step pointer where it is and re-arm a step so the same session reruns.
+    if ((meta.attempts || 0) < 1) {
+      meta.attempts = (meta.attempts || 0) + 1;
+      meta.lockedAt = null; meta.updatedAt = Date.now();
+      try { await kv.set("job:" + jobId, JSON.stringify(meta), JOB_TTL); } catch (e) {}
+      if (qstash.configured()) {
+        var rbase = meta.base || qstash.baseUrl(req);
+        await qstash.publish(rbase + "/api/step", { job: jobId }, 3);   // small pause before retry
+      }
+      res.status(200).json({ status: "running", step: step, total: meta.total, label: "Session " + (step + 1) + " needed a second try…", retrying: true });
+      return;
+    }
+    // Auto-retry is spent: pause here, keeping every finished session, and wait
+    // for the teacher to retry just this one. Nothing already written is lost.
+    meta.status = "paused";
+    meta.error = "Session " + (step + 1) + " could not be written just now. " + why;
     meta.lockedAt = null; meta.updatedAt = Date.now();
-    try { await kv.set("job:" + jobId, JSON.stringify(meta), 6 * 60 * 60); } catch (e) {}
-    res.status(200).json({ status: "error", step: step, total: meta.total, error: meta.error });
+    try { await kv.set("job:" + jobId, JSON.stringify(meta), JOB_TTL); } catch (e) {}
+    await lib.logError("session", "Session " + (step + 1) + "/" + N + " paused: " + why);
+    res.status(200).json({ status: "paused", step: step, total: meta.total, failedStep: step, error: meta.error, lowQuality: meta.lowQuality });
     return;
   }
 
@@ -85,10 +119,15 @@ module.exports = async function (req, res) {
   else { meta.results.map = text; }
 
   meta.step = step + 1;
+  meta.attempts = 0;                              // fresh retry budget for the next piece
   if (meta.step >= meta.total) { meta.status = "done"; }
   meta.lockedAt = null; meta.updatedAt = Date.now();
-  try { await kv.set("job:" + jobId, JSON.stringify(meta), 6 * 60 * 60); }
+  try { await kv.set("job:" + jobId, JSON.stringify(meta), JOB_TTL); }
   catch (e) { res.status(503).json({ error: "Couldn't save progress. Please try again." }); return; }
+
+  // On completion, save the finished chapter into the shared library so it stays
+  // available after the job's own 6-hour window (kept until a teacher deletes it).
+  if (meta.status === "done") { await lib.saveChapter(jobId, meta); }
 
   // Chain the next piece via QStash so the job finishes even if the browser is
   // closed. (The busy/lock path above never reaches here, so we never double up.)

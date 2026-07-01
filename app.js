@@ -45,7 +45,7 @@
     var btn = el("loginBtn"); btn.disabled = true; var lbl = btn.textContent; btn.textContent = "Checking…";
     checkPassword(pw).then(function (ok) {
       btn.disabled = false; btn.textContent = lbl;
-      if (ok) { setPw(pw); showGate(false); }
+      if (ok) { setPw(pw); showGate(false); loadLibrary(); }
       else { el("loginErr").classList.remove("hidden"); el("schoolPw").focus(); }
     });
   }
@@ -295,7 +295,7 @@
     currentSessions = []; summaryMarkdown = ""; lastMarkdown = "";
     chapterMapData = null; dailyMapData = []; dailyPng = [];
     el("planResult").classList.remove("hidden");
-    el("planBody").innerHTML = ""; showToolbar(false);
+    el("planBody").innerHTML = ""; showToolbar(false); hideRetryBanner();
     el("genStatus").classList.add("hidden");
     showProgress(true); setProgress(0, total, "Saving your chapter…");
     el("planTitle").textContent = "Your lesson plan";
@@ -339,6 +339,7 @@
         if (j.lowQuality) lowQ = true;
         if (j.step != null) curStep = j.step;
         if (j.status === "error") { saveJob(null); showProgress(false); setStatus((j.error || "Something went wrong.") + " Please tap Make again.", "error"); resetGenBtn(); return; }
+        if (j.status === "paused") { handlePaused(jobId, total, false, j); return; }
         setProgress(curStep, total, (j.label || "Working…") + " — you can leave this page and come back");
         if (j.status === "done") { finishJob(jobId, lowQ); return; }
         step();                                  // straight on to the next piece
@@ -364,7 +365,8 @@
         }
         if (j.lowQuality) lowQ = true;
         if (j.status === "error") { saveJob(null); showProgress(false); setStatus((j.error || "Something went wrong.") + " Please tap Make again.", "error"); resetGenBtn(); return; }
-        if (j.status === "done" && j.results) { renderResults(j.results, lowQ || j.lowQuality); saveJob(null); resetGenBtn(); return; }
+        if (j.status === "paused") { handlePaused(jobId, total, true, j); return; }
+        if (j.status === "done" && j.results) { renderResults(j.results, lowQ || j.lowQuality); saveJob(null); resetGenBtn(); loadLibrary(); return; }
         // Track stalls: if nothing has advanced for ~80s, nudge a step in case a
         // trigger was lost, then keep polling.
         if (j.step === curStep) { sameFor++; } else { curStep = j.step || 0; sameFor = 0; }
@@ -379,7 +381,8 @@
   function finishJob(jobId, lowQ) {
     apiGet("api/status?job=" + encodeURIComponent(jobId)).then(function (r) {
       var j = r.json || {};
-      if (j.status === "done" && j.results) { renderResults(j.results, lowQ || j.lowQuality); saveJob(null); }
+      if (j.status === "paused") { handlePaused(jobId, null, false, j); return; }
+      if (j.status === "done" && j.results) { renderResults(j.results, lowQ || j.lowQuality); saveJob(null); loadLibrary(); }
       else { showProgress(false); setStatus("Finished, but couldn't load the files. Please reopen the app.", "warn"); }
       resetGenBtn();
     }, function () { showProgress(false); setStatus("Finished, but couldn't load. Please reopen the app.", "warn"); resetGenBtn(); });
@@ -417,7 +420,8 @@
       el("planTitle").textContent = "Your lesson plan";
       setMeta([job.grade, job.subject, job.sessions + " session" + (job.sessions > 1 ? "s" : "")]);
       el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
-      if (j.status === "done" && j.results) { renderResults(j.results, j.lowQuality); saveJob(null); return; }
+      if (j.status === "done" && j.results) { renderResults(j.results, j.lowQuality); saveJob(null); loadLibrary(); return; }
+      if (j.status === "paused") { handlePaused(job.jobId, total, !!job.selfRunning, j); return; }
       el("planBody").innerHTML = ""; showToolbar(false);
       showProgress(true); setProgress(j.step || 0, total, (j.label || "Picking up where it left off…"));
       driveJob(job.jobId, total, !!job.selfRunning);
@@ -1054,6 +1058,113 @@
     if (act === "share") { shareDoc(f.doc); return; }
   }
 
+  // ---- Paused session → "Retry this session" ---------------------------
+  // A session used up its one automatic retry. We keep every finished session,
+  // show them below, and offer a button to try just the stuck one again.
+  function hideRetryBanner() { var b = el("retryBanner"); if (b) { b.classList.add("hidden"); b.innerHTML = ""; } }
+  function showRetryBanner(jobId, sessionNo) {
+    var b = el("retryBanner"); if (!b) return;
+    b.innerHTML =
+      '<div class="retry-msg">Session ' + sessionNo + ' could not be written just now. ' +
+      'Everything else is ready below. You can retry just this one session.</div>' +
+      '<button type="button" class="btn small primary" id="retryStepBtn">Retry session ' + sessionNo + '</button>';
+    b.classList.remove("hidden");
+    var rb = el("retryStepBtn");
+    if (rb) rb.addEventListener("click", function () { resumeStep(jobId, sessionNo); });
+  }
+  function resumeStep(jobId, sessionNo) {
+    var job = loadJob() || {};
+    var total = job.total || 0, selfRunning = !!job.selfRunning;
+    hideRetryBanner();
+    showProgress(true); setProgress(0, total, "Trying that session again…");
+    var btn = el("generateBtn"); btn.disabled = true; btn.textContent = "Making your plan…";
+    apiPost("api/step", { job: jobId, resume: true }).then(function () {
+      driveJob(jobId, total, selfRunning);
+    }, function () {
+      showProgress(false); setStatus("Couldn't reach the plan maker. Please try again.", "error"); resetGenBtn();
+      showRetryBanner(jobId, sessionNo);
+    });
+  }
+  // Land in the paused state: show whatever finished, then the retry banner.
+  function handlePaused(jobId, total, selfRunning, j) {
+    function proceed(jj) {
+      showProgress(false);
+      if (jj.results && jj.results.sessions && jj.results.sessions.length) { renderResults(jj.results, jj.lowQuality); }
+      else { showToolbar(false); el("planBody").innerHTML = ""; }
+      var n = (jj.failedStep != null ? jj.failedStep : (jj.step || 0)) + 1;
+      showRetryBanner(jobId, n);
+      resetGenBtn();
+    }
+    if (j && j.results) { proceed(j); return; }
+    apiGet("api/status?job=" + encodeURIComponent(jobId)).then(function (r) { proceed(r.json || j || {}); }, function () { proceed(j || {}); });
+  }
+
+  // ---- My Chapters library ---------------------------------------------
+  var libItems = [];
+  function libDate(ms) {
+    try { return new Date(ms).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); }
+    catch (e) { return ""; }
+  }
+  function setSelect(id, val) {
+    var s = el(id); if (!s || val == null) return;
+    for (var o = 0; o < s.options.length; o++) { if (s.options[o].value === val) { s.value = val; return; } }
+  }
+  function loadLibrary() {
+    var listEl = el("libList"); if (!listEl) return;
+    var loading = el("libLoading"), empty = el("libEmpty");
+    loading.classList.remove("hidden"); empty.classList.add("hidden");
+    apiGet("api/library?pw=" + encodeURIComponent(getPw())).then(function (r) {
+      loading.classList.add("hidden");
+      if (r.status === 401 || r.status === 503 || !r.json) { listEl.innerHTML = ""; return; }
+      renderLibrary((r.json && r.json.items) || []);
+    }, function () { loading.classList.add("hidden"); });
+  }
+  function renderLibrary(items) {
+    libItems = items || [];
+    var listEl = el("libList"), empty = el("libEmpty");
+    if (!libItems.length) { listEl.innerHTML = ""; empty.classList.remove("hidden"); return; }
+    empty.classList.add("hidden");
+    listEl.innerHTML = libItems.map(function (it) {
+      var n = it.sessions || 0;
+      var meta = [it.grade, it.subject, n + " session" + (n > 1 ? "s" : ""), libDate(it.createdAt)]
+        .filter(Boolean).join(" · ");
+      return '<div class="lib-row">' +
+        '<div class="lib-info"><span class="lib-ico">📘</span>' +
+        '<span class="lib-text"><span class="lib-name">' + esc(it.title || "Chapter") + '</span>' +
+        '<span class="lib-sub">' + esc(meta) + "</span></span></div>" +
+        '<div class="lib-acts">' +
+        '<button type="button" class="btn small primary" data-libact="open" data-id="' + esc(it.id) + '">Open</button>' +
+        '<button type="button" class="btn small ghost" data-libact="delete" data-id="' + esc(it.id) + '">Delete</button>' +
+        "</div></div>";
+    }).join("");
+  }
+  function openChapter(id) {
+    var loading = el("libLoading"); loading.classList.remove("hidden");
+    apiGet("api/library?id=" + encodeURIComponent(id) + "&pw=" + encodeURIComponent(getPw())).then(function (r) {
+      loading.classList.add("hidden");
+      if (!r.ok || !r.json || !r.json.results) { setStatus("That chapter could not be opened.", "warn"); return; }
+      var it = r.json;
+      setSelect("grade", it.grade); setSelect("subject", it.subject);
+      hideRetryBanner(); showProgress(false); el("genStatus").classList.add("hidden");
+      el("planResult").classList.remove("hidden");
+      el("planTitle").textContent = it.title || "Your lesson plan";
+      renderResults(it.results, false);
+      el("planResult").scrollIntoView({ behavior: "smooth", block: "start" });
+    }, function () { loading.classList.add("hidden"); setStatus("Couldn't reach the library. Please try again.", "warn"); });
+  }
+  function deleteChapter(id) {
+    if (!window.confirm("Delete this chapter from the library? This cannot be undone.")) return;
+    apiPost("api/library?id=" + encodeURIComponent(id), { action: "delete", id: id, password: getPw() })
+      .then(function () { loadLibrary(); }, function () {});
+  }
+  function onLibAct(e) {
+    var b = e.target.closest ? e.target.closest("button[data-libact]") : null;
+    if (!b) return;
+    var id = b.getAttribute("data-id"), act = b.getAttribute("data-libact");
+    if (act === "open") openChapter(id);
+    else if (act === "delete") deleteChapter(id);
+  }
+
   // ---- Wiring -----------------------------------------------------------
   document.addEventListener("DOMContentLoaded", function () {
     if (window.pdfjsLib) {                     // point pdf.js at its vendored worker
@@ -1062,10 +1173,13 @@
     loadLastChoice();
     initLoginGate();
     resumeJob();                               // pick up a chapter still cooking from a previous visit
+    loadLibrary();                             // show the shared library of saved chapters
     el("loginForm").addEventListener("submit", handleLogin);
     el("chapter-form").addEventListener("submit", handleSubmit);
     el("regenBtn").addEventListener("click", regenerate);
     el("filesList").addEventListener("click", onFileAct);
+    el("libRefresh").addEventListener("click", loadLibrary);
+    el("libList").addEventListener("click", onLibAct);
     el("chapterFile").addEventListener("change", function () {
       if (el("chapterFile").files.length) el("field-chapterFile").classList.remove("invalid");
     });

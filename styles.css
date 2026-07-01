@@ -346,6 +346,32 @@ input[type="file"]:hover{border-color:var(--brand);}
   .file-acts{justify-content:flex-end;}
 }
 
+/* Retry banner — one session paused and can be retried on its own. */
+.retry-banner{background:#fff7ef; border:1px solid #f3ddc4; color:#8a5312;
+  border-radius:10px; padding:13px 15px; margin:0 0 16px; font-size:14px; line-height:1.5;
+  display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+.retry-banner.hidden{display:none;}
+.retry-banner .retry-msg{min-width:0;}
+
+/* My Chapters — the shared saved library. */
+.library{max-width:760px; margin:0 auto; padding:0 20px 40px;}
+.library-head{display:flex; align-items:center; justify-content:space-between; gap:12px;}
+.library-head h2{margin:0;}
+.lib-list{display:flex; flex-direction:column; gap:10px; margin-top:6px;}
+.lib-row{display:flex; align-items:center; justify-content:space-between; gap:12px;
+  background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-sm);
+  padding:12px 14px;}
+.lib-info{display:flex; align-items:center; gap:12px; min-width:0;}
+.lib-ico{font-size:22px; line-height:1; flex:none;}
+.lib-text{display:flex; flex-direction:column; min-width:0;}
+.lib-name{font-weight:700; color:var(--ink); font-size:15px; overflow:hidden; text-overflow:ellipsis;}
+.lib-sub{color:var(--soft); font-size:12.5px; margin-top:1px;}
+.lib-acts{display:flex; gap:8px; flex:none;}
+@media(max-width:560px){
+  .lib-row{flex-direction:column; align-items:stretch;}
+  .lib-acts{justify-content:flex-end;}
+}
+
 /* Progress bar shown WHILE sessions are being written (the plan itself stays
    hidden until every session is done). */
 .gen-progress{margin:0 0 14px;}
@@ -600,7 +626,8 @@ body.gated{overflow:hidden;}
 /* Print: just the plan, tight */
 @media print{
   .login-gate, .site-header, .hero, .how, form, .sample, .site-footer,
-  .plan-files, .gen-status, .trunc-note, .ai-note{display:none !important;}
+  .plan-files, .gen-status, .trunc-note, .ai-note,
+  .retry-banner, .library{display:none !important;}
   .panel{box-shadow:none; border:none; padding:0;}
   .result.hidden{display:none;}
   .output-toolbar{border:none; margin-bottom:8px;}

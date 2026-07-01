@@ -29,5 +29,10 @@ module.exports = {
   del: function (k) { return cmd(["DEL", k]); },
   incr: function (k) { return cmd(["INCR", k]); },
   decr: function (k) { return cmd(["DECR", k]); },
-  expire: function (k, ttlSeconds) { return cmd(["EXPIRE", k, String(ttlSeconds)]); }
+  expire: function (k, ttlSeconds) { return cmd(["EXPIRE", k, String(ttlSeconds)]); },
+  // List helpers, used by the shared chapter library and the error log.
+  lpush: function (k, v) { return cmd(["LPUSH", k, v]); },
+  lrange: function (k, start, stop) { return cmd(["LRANGE", k, String(start), String(stop)]); },
+  lrem: function (k, count, v) { return cmd(["LREM", k, String(count), v]); },
+  ltrim: function (k, start, stop) { return cmd(["LTRIM", k, String(start), String(stop)]); }
 };
