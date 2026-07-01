@@ -14,8 +14,8 @@ function label(step, N) {
 }
 
 module.exports = async function (req, res) {
-  var key = process.env.GEMINI_API_KEY;
-  if (!key || !kv.configured()) { res.status(503).json({ error: "Background mode is not set up." }); return; }
+  var haveWriter = process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY;
+  if (!haveWriter || !kv.configured()) { res.status(503).json({ error: "Background mode is not set up." }); return; }
 
   var jobId = (req.query && req.query.job) ||
     (req.body && (typeof req.body === "string" ? "" : req.body.job)) || "";
@@ -62,9 +62,8 @@ module.exports = async function (req, res) {
     prior: meta.results.sessions.join("\n\n")
   };
 
-  var model = gen.defaultModel();
   var result;
-  try { result = await gen.callGemini(key, model, d); }
+  try { result = await gen.callModel(d); }
   catch (e) { result = { ok: false, errorMessage: "Could not reach the writer." }; }
 
   // A session must produce real text; the summary and map are optional bonuses.

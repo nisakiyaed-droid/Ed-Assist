@@ -23,8 +23,8 @@ function secondsToIstMidnight() {
 
 module.exports = async function (req, res) {
   if (req.method !== "POST") { res.status(405).json({ error: "Use POST." }); return; }
-  if (!process.env.GEMINI_API_KEY) {
-    res.status(503).json({ error: "This planner isn't set up yet (missing Gemini key)." });
+  if (!process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY) {
+    res.status(503).json({ error: "This planner isn't set up yet (missing writer key)." });
     return;
   }
   if (!kv.configured()) {

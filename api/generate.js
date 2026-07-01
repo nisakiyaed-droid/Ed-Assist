@@ -425,6 +425,146 @@ async function callGemini(key, model, d, extraInstruction) {
   }
 }
 
+// One Claude (Anthropic Messages API) round-trip. Raw HTTPS — no SDK, matching
+// the zero-dependency style of the rest of the backend. Returns the SAME
+// normalised shape as callGemini { ok, status, text, finishReason, errorMessage,
+// blockReason } so every caller and quality gate works unchanged. Privacy: never
+// logs the chapter or the plan.
+//
+// Notes for Opus 4.8: send NO temperature / top_p / top_k / budget_tokens (all
+// rejected with a 400). Use adaptive thinking + output_config.effort for depth.
+// stop_reason is mapped to Gemini-style finishReason: "end_turn"/"stop_sequence"
+// → "STOP" (a clean finish the gates accept), "max_tokens" stays itself (so the
+// gate flags it as truncated), "refusal" is surfaced as a soft error so the
+// dispatcher can fall back to Gemini.
+async function callClaude(key, model, d, extraInstruction) {
+  var isSummary = d.mode === "summary";
+  var isMap = d.mode === "map";
+  var systemText = FRAMEWORK + "\n\n" +
+    (isSummary ? summaryAddendum(d) : isMap ? mapAddendum(d) : addendum(d));
+  var userText = isSummary ? summaryUserMessage(d) : isMap ? mapUserMessage(d) : userMessage(d);
+
+  // Text first (matching Gemini's order), then each chapter page. Small PDFs
+  // arrive as application/pdf (Claude reads them as documents); big ones were
+  // shrunk to JPEGs in the browser (image blocks). A cache breakpoint on the
+  // final page block lets an immediate retry of the same piece reuse the upload.
+  var content = [{ type: "text", text: userText }];
+  if (extraInstruction) { content.push({ type: "text", text: extraInstruction }); }
+  var files = Array.isArray(d.files) ? d.files : [];
+  var lastFileIdx = -1;
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i];
+    if (!f || !f.data) { continue; }
+    var mt = f.mimeType || "";
+    if (mt.indexOf("image/") === 0) {
+      content.push({ type: "image", source: { type: "base64", media_type: mt, data: f.data } });
+    } else {
+      // application/pdf (or unknown) → document block.
+      content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: f.data } });
+    }
+    lastFileIdx = content.length - 1;
+  }
+  if (lastFileIdx >= 0) { content[lastFileIdx].cache_control = { type: "ephemeral" }; }
+
+  // effort controls how deeply Opus thinks. Vercel Hobby caps each function at
+  // 60s, so "medium" (the default) keeps a single piece reliably under that;
+  // ANTHROPIC_EFFORT can raise or lower it without a code change.
+  var effort = process.env.ANTHROPIC_EFFORT || "medium";
+  var body = {
+    model: model,
+    max_tokens: 32000,
+    // FRAMEWORK is identical across every piece of every chapter, so cache it;
+    // the per-session addendum is a separate, uncached block after it.
+    system: [
+      { type: "text", text: FRAMEWORK, cache_control: { type: "ephemeral" } },
+      { type: "text", text: systemText.slice(FRAMEWORK.length) }
+    ],
+    messages: [{ role: "user", content: content }],
+    thinking: { type: "adaptive" },
+    output_config: { effort: effort }
+  };
+
+  try {
+    var ares = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(body),
+      // Never let a slow model blow past Vercel's 60s function limit: abort a few
+      // seconds short so the caller can surface a clean, retryable message.
+      signal: (typeof AbortSignal !== "undefined" && AbortSignal.timeout) ? AbortSignal.timeout(55000) : undefined
+    });
+    var raw = await ares.text();
+    var json;
+    try { json = JSON.parse(raw); } catch (e) { json = null; }
+
+    if (!ares.ok) {
+      var m = (json && json.error && json.error.message) || ("Claude request failed (" + ares.status + ").");
+      return { ok: false, status: ares.status, text: "", finishReason: null, errorMessage: m, blockReason: null };
+    }
+    var stop = json && json.stop_reason;
+    if (stop === "refusal") {
+      // A safety classifier declined. Treat as a soft failure so callModel can
+      // fall back to Gemini rather than failing the whole chapter.
+      return { ok: false, status: ares.status, text: "", finishReason: "refusal", errorMessage: "Claude declined this request.", blockReason: "refusal" };
+    }
+    var text = (json && Array.isArray(json.content) ? json.content : [])
+      .filter(function (b) { return b && b.type === "text"; })
+      .map(function (b) { return b.text || ""; }).join("");
+    // Same degenerate-output guard as Gemini: a normal plan is ~12-14k chars.
+    if (text.length > 42000) {
+      return { ok: false, status: ares.status, text: "", finishReason: stop || null, errorMessage: "The plan came out garbled. Please tap \"Make again\".", blockReason: null };
+    }
+    var finishReason = (stop === "end_turn" || stop === "stop_sequence") ? "STOP" : (stop || null);
+    return { ok: true, status: ares.status, text: text, finishReason: finishReason, errorMessage: null, blockReason: null };
+  } catch (err) {
+    var aborted = err && (err.name === "TimeoutError" || err.name === "AbortError");
+    return {
+      ok: false, status: 0, text: "", finishReason: null,
+      errorMessage: aborted
+        ? "Claude took too long to write this piece. Please try again."
+        : "Couldn't reach Claude to write the plan. Please try again in a moment.",
+      blockReason: null
+    };
+  }
+}
+
+// Provider dispatch. The school chose Claude Opus as the primary writer with an
+// automatic Gemini fallback. So: if an Anthropic key is present, write with
+// Claude; only if that call fails or comes back empty (and there is still enough
+// of the 60s window left to make a second call safely) do we fall back to Gemini.
+// With no Anthropic key it behaves exactly like the old Gemini-only path.
+async function callModel(d, extraInstruction) {
+  var claudeKey = process.env.ANTHROPIC_API_KEY;
+  var geminiKey = process.env.GEMINI_API_KEY;
+  var geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+  if (claudeKey) {
+    var claudeModel = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
+    var startedAt = Date.now();
+    var r;
+    try { r = await callClaude(claudeKey, claudeModel, d, extraInstruction); }
+    catch (e) { r = { ok: false, status: 0, text: "", finishReason: null, errorMessage: "Couldn't reach Claude.", blockReason: null }; }
+    if (r && r.ok && (r.text || "").trim()) { return r; }
+    // Claude failed or returned nothing. Fall back to Gemini only if we have a
+    // key AND the first call failed quickly enough that a second one still fits
+    // inside the 60s function budget (a slow Claude timeout must NOT be chased
+    // by a 30s Gemini call — that would exceed the limit and kill the step).
+    var elapsed = Date.now() - startedAt;
+    if (geminiKey && elapsed < 30000) {
+      try { return await callGemini(geminiKey, geminiModel, d, extraInstruction); }
+      catch (e2) { /* fall through to Claude's error */ }
+    }
+    return r;
+  }
+
+  // No Claude key configured: original Gemini-only behaviour.
+  return await callGemini(geminiKey, geminiModel, d, extraInstruction);
+}
+
 // Structural quality gate. Returns { ok, missing } where `missing` lists short
 // labels for whatever required section/shape is absent. The caller handles the
 // finishReason !== "STOP" check separately (a non-STOP plan is incomplete even
@@ -518,15 +658,14 @@ module.exports = async function (req, res) {
     res.status(405).json({ error: "Use POST." });
     return;
   }
-  var key = process.env.GEMINI_API_KEY;
-  if (!key) {
+  // Either provider key is enough: Claude (primary) or Gemini (fallback / solo).
+  if (!process.env.ANTHROPIC_API_KEY && !process.env.GEMINI_API_KEY) {
     res.status(503).json({
-      error: "This planner isn't set up yet. The school needs to add the Gemini key once " +
-        "in Vercel → Settings → Environment Variables (name it GEMINI_API_KEY), then redeploy."
+      error: "This planner isn't set up yet. The school needs to add a writer key once " +
+        "in Vercel → Settings → Environment Variables (ANTHROPIC_API_KEY, or GEMINI_API_KEY), then redeploy."
     });
     return;
   }
-  var model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
   var d;
   try {
@@ -557,14 +696,14 @@ module.exports = async function (req, res) {
   var isSummary = d.mode === "summary";
   var isMap = d.mode === "map";
 
-  // ONE Gemini call. We deliberately do NOT auto-retry: a second ~30s call would
-  // risk exceeding Vercel's 60s function limit (which the teacher sees as "not
+  // ONE writer call (Claude primary, Gemini fallback inside callModel). We
+  // deliberately do NOT auto-retry at this layer: a second call would risk
+  // exceeding Vercel's 60s function limit (which the teacher sees as "not
   // connected"). The gate below instead flags a weak draft so the app can offer
   // "Make again".
-  var first = await callGemini(key, model, d);
-  // Hard errors first, exactly as before: Gemini transport/API failure → 502,
-  // a blocked prompt → 422. Empty text is NOT fatal here — we fall through to
-  // the retry below.
+  var first = await callModel(d);
+  // Hard errors first: a writer transport/API failure → 502, a blocked prompt
+  // → 422. Empty text is NOT fatal here — we fall through to the flag below.
   if (!first.ok) {
     res.status(502).json({ error: first.errorMessage });
     return;
@@ -613,6 +752,8 @@ module.exports.config = { maxDuration: 60 };
 // Exported so the background-job endpoints (start/step/status) can reuse the
 // exact same engine and quality gates instead of duplicating them.
 module.exports.callGemini = callGemini;
+module.exports.callClaude = callClaude;
+module.exports.callModel = callModel;
 module.exports.planPasses = planPasses;
 module.exports.summaryPasses = summaryPasses;
 module.exports.mapPasses = mapPasses;
