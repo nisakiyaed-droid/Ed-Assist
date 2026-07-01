@@ -394,7 +394,12 @@ async function callGemini(key, model, d, extraInstruction) {
     var gres = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(body),
+      // Never let a slow response hang past Vercel's 60s function limit (which
+      // would leave the whole step stuck): abort short and return a clean,
+      // retryable failure. GEMINI_TIMEOUT_MS overrides.
+      signal: (typeof AbortSignal !== "undefined" && AbortSignal.timeout)
+        ? AbortSignal.timeout(parseInt(process.env.GEMINI_TIMEOUT_MS, 10) || 50000) : undefined
     });
     var raw = await gres.text();
     var json;
@@ -537,48 +542,44 @@ async function callClaude(key, model, d, extraInstruction) {
   }
 }
 
-// Provider dispatch. The school chose Claude Opus as the primary writer with an
-// automatic Gemini fallback. So: if an Anthropic key is present, write with
-// Claude; only if that call fails or comes back empty (and there is still enough
-// of the 60s window left to make a second call safely) do we fall back to Gemini.
-// With no Anthropic key it behaves exactly like the old Gemini-only path.
+// Provider dispatch.
 //
-// d.preferFast (set on a RETRY): write with the fast, proven Gemini first so a
-// piece that Opus was too slow to finish still completes inside the next 60s
-// window. This is what stops a chapter getting stuck on a slow session.
+// RELIABILITY FIRST: Gemini is the default writer because it reliably finishes
+// a piece within Vercel's 60s per-step limit, even for image-heavy chapters —
+// this is the configuration that worked in background mode before Claude was
+// added. Claude Opus is a much deeper writer but frequently cannot finish inside
+// 60s on the Hobby plan, which left chapters stuck. So Opus is now OPT-IN:
+//   WRITER=claude   → try Opus first, fall back to Gemini if it fails fast
+// otherwise (default) → Gemini only.
+// Every writer call has its own hard timeout, so a step can never hang past 60s;
+// worst case it returns a clean failure and the job pauses with a retry button.
 async function callModel(d, extraInstruction) {
   var claudeKey = process.env.ANTHROPIC_API_KEY;
   var geminiKey = process.env.GEMINI_API_KEY;
   var geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  var claudeModel = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
+  var wantClaude = process.env.WRITER === "claude";
 
-  if (d && d.preferFast && geminiKey) {
-    try {
-      var gfast = await callGemini(geminiKey, geminiModel, d, extraInstruction);
-      if (gfast && gfast.ok && (gfast.text || "").trim()) { return gfast; }
-    } catch (e) { /* fall through to Claude below */ }
-  }
-
-  if (claudeKey) {
-    var claudeModel = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
+  // Opt-in Opus path (and never on a retry, which must be fast to complete).
+  if (wantClaude && claudeKey && !(d && d.preferFast)) {
     var startedAt = Date.now();
     var r;
     try { r = await callClaude(claudeKey, claudeModel, d, extraInstruction); }
     catch (e) { r = { ok: false, status: 0, text: "", finishReason: null, errorMessage: "Couldn't reach Claude.", blockReason: null }; }
     if (r && r.ok && (r.text || "").trim()) { return r; }
-    // Claude failed or returned nothing. Fall back to Gemini only if we have a
-    // key AND the first call failed quickly enough that a second one still fits
-    // inside the 60s function budget (a slow Claude timeout must NOT be chased
-    // by a 30s Gemini call — that would exceed the limit and kill the step).
-    var elapsed = Date.now() - startedAt;
-    if (geminiKey && elapsed < 30000) {
-      try { return await callGemini(geminiKey, geminiModel, d, extraInstruction); }
-      catch (e2) { /* fall through to Claude's error */ }
+    // Only chase with Gemini if Opus failed quickly enough that a second call
+    // still fits inside the 60s window (a slow timeout must not be chased).
+    if (geminiKey && (Date.now() - startedAt) < 15000) {
+      try { return await callGemini(geminiKey, geminiModel, d, extraInstruction); } catch (e2) {}
     }
     return r;
   }
 
-  // No Claude key configured: original Gemini-only behaviour.
-  return await callGemini(geminiKey, geminiModel, d, extraInstruction);
+  // Default: Gemini (fast, reliable inside the 60s step limit).
+  if (geminiKey) { return await callGemini(geminiKey, geminiModel, d, extraInstruction); }
+  // No Gemini key at all: last resort, use Claude alone.
+  if (claudeKey) { return await callClaude(claudeKey, claudeModel, d, extraInstruction); }
+  return { ok: false, status: 0, text: "", finishReason: null, errorMessage: "No writer is configured.", blockReason: null };
 }
 
 // Structural quality gate. Returns { ok, missing } where `missing` lists short
