@@ -467,12 +467,15 @@ async function callClaude(key, model, d, extraInstruction) {
   if (lastFileIdx >= 0) { content[lastFileIdx].cache_control = { type: "ephemeral" }; }
 
   // effort controls how deeply Opus thinks. Vercel Hobby caps each function at
-  // 60s, so "medium" (the default) keeps a single piece reliably under that;
-  // ANTHROPIC_EFFORT can raise or lower it without a code change.
-  var effort = process.env.ANTHROPIC_EFFORT || "medium";
+  // 60s, and a scanned chapter can be many page-images, so we default to "low"
+  // to keep a single piece comfortably under that limit. ANTHROPIC_EFFORT can
+  // raise it (e.g. on Vercel Pro, which allows longer functions) without a code
+  // change. max_tokens is trimmed to what a plan actually needs, which also
+  // shortens the response.
+  var effort = process.env.ANTHROPIC_EFFORT || "low";
   var body = {
     model: model,
-    max_tokens: 32000,
+    max_tokens: 16000,
     // FRAMEWORK is identical across every piece of every chapter, so cache it;
     // the per-session addendum is a separate, uncached block after it.
     system: [
@@ -493,9 +496,11 @@ async function callClaude(key, model, d, extraInstruction) {
         "content-type": "application/json"
       },
       body: JSON.stringify(body),
-      // Never let a slow model blow past Vercel's 60s function limit: abort a few
-      // seconds short so the caller can surface a clean, retryable message.
-      signal: (typeof AbortSignal !== "undefined" && AbortSignal.timeout) ? AbortSignal.timeout(55000) : undefined
+      // Never let a slow model blow past Vercel's 60s function limit: abort well
+      // short so the function returns cleanly (and can re-arm a fast Gemini retry)
+      // instead of being killed mid-request. ANTHROPIC_TIMEOUT_MS overrides it.
+      signal: (typeof AbortSignal !== "undefined" && AbortSignal.timeout)
+        ? AbortSignal.timeout(parseInt(process.env.ANTHROPIC_TIMEOUT_MS, 10) || 45000) : undefined
     });
     var raw = await ares.text();
     var json;
@@ -537,10 +542,21 @@ async function callClaude(key, model, d, extraInstruction) {
 // Claude; only if that call fails or comes back empty (and there is still enough
 // of the 60s window left to make a second call safely) do we fall back to Gemini.
 // With no Anthropic key it behaves exactly like the old Gemini-only path.
+//
+// d.preferFast (set on a RETRY): write with the fast, proven Gemini first so a
+// piece that Opus was too slow to finish still completes inside the next 60s
+// window. This is what stops a chapter getting stuck on a slow session.
 async function callModel(d, extraInstruction) {
   var claudeKey = process.env.ANTHROPIC_API_KEY;
   var geminiKey = process.env.GEMINI_API_KEY;
   var geminiModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+  if (d && d.preferFast && geminiKey) {
+    try {
+      var gfast = await callGemini(geminiKey, geminiModel, d, extraInstruction);
+      if (gfast && gfast.ok && (gfast.text || "").trim()) { return gfast; }
+    } catch (e) { /* fall through to Claude below */ }
+  }
 
   if (claudeKey) {
     var claudeModel = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";

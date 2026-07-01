@@ -72,11 +72,19 @@ module.exports = async function (req, res) {
   } catch (e) { files = []; }
   if (!files.length) { res.status(410).json({ error: "The chapter is no longer in the store. Please start again." }); return; }
 
+  // A big scanned chapter arrives as many page-images. Opus is too slow to read
+  // that many images and still write within the 60s limit, so for a heavy image
+  // chapter we go straight to the fast writer. A clean short PDF (a page or two)
+  // still gets Opus quality. A retry always uses the fast writer.
+  var imgCount = files.filter(function (f) { return f && /^image\//.test(f.mimeType || ""); }).length;
+  var heavy = imgCount >= (parseInt(process.env.OPUS_MAX_IMAGE_PAGES, 10) || 12);
+
   var d = {
     grade: meta.grade, subject: meta.subject, sessions: N,
     chapterNumber: meta.chapterNumber, chapterName: meta.chapterName,
     files: files, mode: mode, sessionNo: step + 1,
-    prior: meta.results.sessions.join("\n\n")
+    prior: meta.results.sessions.join("\n\n"),
+    preferFast: heavy || (meta.attempts || 0) >= 1
   };
 
   var result;
