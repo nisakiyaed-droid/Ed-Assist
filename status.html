@@ -38,11 +38,11 @@
   <div class="wrap">
     <a class="back" href="index.html">← Back to the planner</a>
     <h1>Lesson Planner — Status</h1>
-    <p class="muted">A private health check for the school administrator.</p>
+    <p class="muted">Admin only. This uses a separate admin password, not the shared school password teachers use.</p>
 
     <form id="pwForm" class="card">
-      <p class="h2">Enter the school password</p>
-      <input type="password" id="pw" placeholder="School password" autocomplete="current-password" />
+      <p class="h2">Enter the admin password</p>
+      <input type="password" id="pw" placeholder="Admin password" autocomplete="current-password" />
       <div style="margin-top:12px"><button type="submit" id="go">Check status</button></div>
       <p id="pwErr" class="err hidden">That password didn't work.</p>
     </form>
@@ -120,9 +120,15 @@
       function load(pw) {
         lastPw = pw;
         return fetch("api/health?pw=" + encodeURIComponent(pw)).then(function (r) {
-          if (r.status === 401) { el("pwErr").classList.remove("hidden"); return null; }
-          return r.json();
-        }).then(function (d) { if (d) render(d); }, function () {
+          return r.json().then(function (d) { return { status: r.status, d: d }; }, function () { return { status: r.status, d: null }; });
+        }).then(function (res) {
+          if (res.status === 401) { el("pwErr").textContent = "That password didn't work."; el("pwErr").classList.remove("hidden"); return; }
+          if (res.status !== 200 || !res.d || res.d.error) {
+            el("pwErr").textContent = (res.d && res.d.error) || "Couldn't reach the status service.";
+            el("pwErr").classList.remove("hidden"); return;
+          }
+          render(res.d);
+        }, function () {
           el("pwErr").textContent = "Couldn't reach the status service."; el("pwErr").classList.remove("hidden");
         });
       }

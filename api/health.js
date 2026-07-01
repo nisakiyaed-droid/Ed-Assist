@@ -15,10 +15,17 @@ function istDay() {
 }
 
 module.exports = async function (req, res) {
-  if (process.env.SCHOOL_PASSWORD) {
-    var pw = (req.query && req.query.pw) || "";
-    if (String(pw) !== process.env.SCHOOL_PASSWORD) { res.status(401).json({ error: "Wrong school password." }); return; }
+  // The status page is ADMIN-ONLY and must NOT open with the shared school
+  // password (every teacher has that). It uses its own ADMIN_PASSWORD secret,
+  // known only to the administrator. If that isn't set yet, the page stays
+  // locked for everyone rather than falling back to the school password.
+  var admin = process.env.ADMIN_PASSWORD || "";
+  if (!admin) {
+    res.status(503).json({ error: "The status page needs an admin password. Add ADMIN_PASSWORD in Vercel (Settings → Environment Variables), then reload." });
+    return;
   }
+  var pw = (req.query && req.query.pw) || "";
+  if (String(pw) !== admin) { res.status(401).json({ error: "Wrong admin password." }); return; }
 
   var config = {
     claude: !!process.env.ANTHROPIC_API_KEY,
